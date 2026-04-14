@@ -172,6 +172,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "get_active_photo",
+        description: "Get metadata of the currently active/selected photo in Lightroom (the photo open in Develop or selected in Library)",
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
+      {
         name: "list_collections",
         description: "List all collections in Lightroom catalog",
         inputSchema: {

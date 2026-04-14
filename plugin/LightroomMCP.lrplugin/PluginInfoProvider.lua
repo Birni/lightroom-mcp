@@ -10,6 +10,7 @@ local JSON = require 'JSON'
 local CollectionsHandler = require 'HandlerCollections'
 local MetadataHandler = require 'HandlerMetadata'
 local SearchHandler = require 'HandlerSearch'
+local OrganizationHandler = require 'HandlerOrganization'
 
 local logger = LrLogger('LightroomMCP')
 logger:enable("logfile")
@@ -77,8 +78,14 @@ local function pollServer()
         result = CollectionsHandler.listCollections(data.params)
     elseif data.action == "get_photo_metadata" then
         result = MetadataHandler.getPhotoMetadata(data.params)
+    elseif data.action == "get_active_photo" then
+        result = MetadataHandler.getActivePhoto()
     elseif data.action == "search_photos" then
         result = SearchHandler.searchPhotos(data.params)
+    elseif data.action == "set_keywords" then
+        result = OrganizationHandler.setKeywords(data.params)
+    elseif data.action == "set_rating" then
+        result = OrganizationHandler.setRating(data.params)
     else
         result = { error = "Action not yet implemented: " .. data.action }
     end

@@ -12,6 +12,71 @@ local function sanitize(value)
     return value:gsub("[^\32-\126]", "?") -- strip non-ASCII bytes
 end
 
+local function buildPhotoData(catalog, photo)
+    local photoData = nil
+
+    catalog:withReadAccessDo(function()
+        local keywords = {}
+        local photoKeywords = photo:getRawMetadata('keywords')
+        if photoKeywords then
+            for _, kw in ipairs(photoKeywords) do
+                table.insert(keywords, kw:getName())
+            end
+        end
+
+        photoData = {
+            id = photo.localIdentifier,
+            path = sanitize(photo:getRawMetadata('path')),
+            filename = sanitize(photo:getFormattedMetadata('fileName')),
+            rating = photo:getRawMetadata('rating'),
+            colorLabel = sanitize(photo:getRawMetadata('colorNameForLabel')),
+            pickStatus = photo:getRawMetadata('pickStatus'),
+            keywords = keywords,
+            dateTimeOriginal = sanitize(photo:getFormattedMetadata('dateTimeOriginal')),
+            cameraMake = sanitize(photo:getFormattedMetadata('cameraMake')),
+            cameraModel = sanitize(photo:getFormattedMetadata('cameraModel')),
+            lens = sanitize(photo:getFormattedMetadata('lens')),
+            isoSpeedRating = sanitize(photo:getFormattedMetadata('isoSpeedRating')),
+            focalLength = sanitize(photo:getFormattedMetadata('focalLength')),
+            aperture = sanitize(photo:getFormattedMetadata('aperture')),
+            shutterSpeed = sanitize(photo:getFormattedMetadata('shutterSpeed')),
+            dimensions = sanitize(photo:getFormattedMetadata('dimensions')),
+            fileSize = sanitize(photo:getFormattedMetadata('fileSize')),
+            fileFormat = sanitize(photo:getRawMetadata('fileFormat')),
+        }
+    end)
+
+    local developSettings = photo:getDevelopSettings()
+    if developSettings then
+        photoData.developSettings = {
+            whiteBalance = developSettings.WhiteBalance,
+            exposure = developSettings.Exposure2012,
+            contrast = developSettings.Contrast2012,
+            highlights = developSettings.Highlights2012,
+            shadows = developSettings.Shadows2012,
+            whites = developSettings.Whites2012,
+            blacks = developSettings.Blacks2012,
+            clarity = developSettings.Clarity2012,
+            vibrance = developSettings.Vibrance,
+            saturation = developSettings.Saturation,
+        }
+    end
+
+    return photoData
+end
+
+function MetadataHandler.getActivePhoto()
+    local catalog = LrApplication.activeCatalog()
+    local photo = catalog:getTargetPhoto()
+
+    if not photo then
+        return { error = "No photo is currently active in Lightroom" }
+    end
+
+    logger:info("Retrieved active photo: " .. tostring(photo.localIdentifier))
+    return buildPhotoData(catalog, photo)
+end
+
 function MetadataHandler.getPhotoMetadata(args)
     if not args.photo_id then
         error("photo_id is required")
@@ -54,61 +119,8 @@ function MetadataHandler.getPhotoMetadata(args)
         return { error = "Photo not found: " .. args.photo_id }
     end
 
-    local photoData = nil
-
-    catalog:withReadAccessDo(function()
-        -- Get keywords
-        local keywords = {}
-        local photoKeywords = photo:getRawMetadata('keywords')
-        if photoKeywords then
-            for _, kw in ipairs(photoKeywords) do
-                table.insert(keywords, kw:getName())
-            end
-        end
-
-        photoData = {
-            id = photo.localIdentifier,
-            path = sanitize(photo:getRawMetadata('path')),
-            filename = sanitize(photo:getFormattedMetadata('fileName')),
-            rating = photo:getRawMetadata('rating'),
-            colorLabel = sanitize(photo:getRawMetadata('colorNameForLabel')),
-            pickStatus = photo:getRawMetadata('pickStatus'),
-            keywords = keywords,
-            dateTimeOriginal = sanitize(photo:getFormattedMetadata('dateTimeOriginal')),
-            cameraMake = sanitize(photo:getFormattedMetadata('cameraMake')),
-            cameraModel = sanitize(photo:getFormattedMetadata('cameraModel')),
-            lens = sanitize(photo:getFormattedMetadata('lens')),
-            isoSpeedRating = sanitize(photo:getFormattedMetadata('isoSpeedRating')),
-            focalLength = sanitize(photo:getFormattedMetadata('focalLength')),
-            aperture = sanitize(photo:getFormattedMetadata('aperture')),
-            shutterSpeed = sanitize(photo:getFormattedMetadata('shutterSpeed')),
-            dimensions = sanitize(photo:getFormattedMetadata('dimensions')),
-            fileSize = sanitize(photo:getFormattedMetadata('fileSize')),
-            fileFormat = sanitize(photo:getRawMetadata('fileFormat')),
-        }
-    end)
-
-    -- getDevelopSettings called outside withReadAccessDo
-    local developSettings = photo:getDevelopSettings()
-
-    if developSettings then
-        photoData.developSettings = {
-            whiteBalance = developSettings.WhiteBalance,
-            exposure = developSettings.Exposure2012,
-            contrast = developSettings.Contrast2012,
-            highlights = developSettings.Highlights2012,
-            shadows = developSettings.Shadows2012,
-            whites = developSettings.Whites2012,
-            blacks = developSettings.Blacks2012,
-            clarity = developSettings.Clarity2012,
-            vibrance = developSettings.Vibrance,
-            saturation = developSettings.Saturation,
-        }
-    end
-
     logger:info("Retrieved metadata for photo: " .. args.photo_id)
-
-    return photoData
+    return buildPhotoData(catalog, photo)
 end
 
 return MetadataHandler
