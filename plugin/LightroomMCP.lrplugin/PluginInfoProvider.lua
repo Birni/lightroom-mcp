@@ -8,6 +8,8 @@ local LrFunctionContext = import 'LrFunctionContext'
 
 local JSON = require 'JSON'
 local CollectionsHandler = require 'HandlerCollections'
+local MetadataHandler = require 'HandlerMetadata'
+local SearchHandler = require 'HandlerSearch'
 
 local logger = LrLogger('LightroomMCP')
 logger:enable("logfile")
@@ -33,71 +35,11 @@ end
 
 addLog("PluginInfoProvider loaded")
 
--- Execute Lightroom action based on request
-local function executeAction(action, params, catalog)
-    addLog("Executing action: " .. action)
-
-    if action == "list_collections" then
-        addLog("Getting child collections...")
-        local collections = catalog:getChildCollections()
-        addLog("Found " .. tostring(#collections) .. " collections")
-
-        local result = {}
-        for _, collection in ipairs(collections) do
-            table.insert(result, {
-                name = collection:getName(),
-                type = "collection",
-                photoCount = #collection:getPhotos()
-            })
-        end
-        addLog("Returning result with " .. #result .. " collections")
-        return { collections = result }
-
-    elseif action == "search_photos" then
-        local allPhotos = catalog:getAllPhotos()
-        local results = {}
-
-        for _, photo in ipairs(allPhotos) do
-            local match = true
-
-            -- Filter by filename
-            if params.filename and not string.find(photo:getFormattedMetadata("fileName"), params.filename, 1, true) then
-                match = false
-            end
-
-            -- Filter by rating
-            if params.rating and photo:getRawMetadata("rating") ~= params.rating then
-                match = false
-            end
-
-            if match then
-                table.insert(results, {
-                    id = photo:getRawMetadata("uuid"),
-                    path = photo:getRawMetadata("path"),
-                    filename = photo:getFormattedMetadata("fileName"),
-                    rating = photo:getRawMetadata("rating"),
-                    date = photo:getFormattedMetadata("captureDate")
-                })
-
-                -- Limit results
-                if #results >= 100 then
-                    break
-                end
-            end
-        end
-
-        return { photos = results, count = #results }
-
-    else
-        return { error = "Unknown action: " .. action }
-    end
-end
-
 -- Poll MCP server for requests
 local function pollServer()
     local response, headers = LrHttp.get(MCP_SERVER_URL .. "/poll-request", {
         { field = "Accept", value = "application/json" }
-    })
+    }, 5)
 
     pluginState.lastPoll = os.date("%H:%M:%S")
 
@@ -130,8 +72,13 @@ local function pollServer()
 
     addLog("Executing action: " .. data.action)
 
+    -- No pcall here: findPhotos/findPhotoByPath yield and cannot run inside pcall in Lua 5.1
     if data.action == "list_collections" then
         result = CollectionsHandler.listCollections(data.params)
+    elseif data.action == "get_photo_metadata" then
+        result = MetadataHandler.getPhotoMetadata(data.params)
+    elseif data.action == "search_photos" then
+        result = SearchHandler.searchPhotos(data.params)
     else
         result = { error = "Action not yet implemented: " .. data.action }
     end
@@ -160,15 +107,15 @@ local function pollServer()
 
     local submitResponse, submitHeaders = LrHttp.post(MCP_SERVER_URL .. "/submit-response", responseData, {
         { field = "Content-Type", value = "application/json" }
-    })
+    }, 5)
 
     addLog("HTTP POST returned: " .. tostring(submitResponse))
 
-    if submitResponse then
+    if submitResponse and submitResponse:find('"success"') then
         addLog("Response submitted successfully")
         pluginState.requestsProcessed = pluginState.requestsProcessed + 1
     else
-        addLog("Failed to submit response - empty response")
+        addLog("Failed to submit response: " .. tostring(submitResponse):sub(1, 120))
     end
 end
 
@@ -184,7 +131,7 @@ local function startPolling()
     pluginState.serverRunning = true
     pluginState.initialized = true
 
-    LrFunctionContext.postAsyncTaskWithContext("PollingLoop", function(context)
+    LrTasks.startAsyncTask(function()
         while pluginState.polling do
             pollServer()
             LrTasks.sleep(POLL_INTERVAL)

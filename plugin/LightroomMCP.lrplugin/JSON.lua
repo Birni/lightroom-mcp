@@ -5,7 +5,7 @@ function JSON:encode(obj)
     local function encode_value(v)
         local t = type(v)
         if t == "string" then
-            return '"' .. v:gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r'):gsub('\t', '\\t') .. '"'
+            return '"' .. v:gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r'):gsub('\t', '\\t') .. '"'
         elseif t == "number" or t == "boolean" then
             return tostring(v)
         elseif t == "table" then
