@@ -1,15 +1,29 @@
 local LrApplication = import 'LrApplication'
+local LrTasks = import 'LrTasks'
 local LrLogger = import 'LrLogger'
 
 local logger = LrLogger('LightroomMCP')
 
 local MetadataHandler = {}
 
--- Make strings safe for JSON: forward-slash Windows paths, strip non-ASCII
+local function base64Encode(data)
+    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    return ((data:gsub('.', function(x)
+        local r, byte = '', x:byte()
+        for i = 8, 1, -1 do r = r .. (byte % 2^i - byte % 2^(i-1) > 0 and '1' or '0') end
+        return r
+    end) .. '0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
+        if #x < 6 then return '' end
+        local c = 0
+        for i = 1, 6 do c = c + (x:sub(i, i) == '1' and 2^(6-i) or 0) end
+        return b:sub(c+1, c+1)
+    end) .. ({ '', '==', '=' })[#data % 3 + 1])
+end
+
 local function sanitize(value)
     if type(value) ~= "string" then return value end
-    value = value:gsub("\\", "/")         -- Windows paths: \ -> /
-    return value:gsub("[^\32-\126]", "?") -- strip non-ASCII bytes
+    value = value:gsub("\\", "/")
+    return value:gsub("[^\32-\126]", "?")
 end
 
 local function buildPhotoData(catalog, photo)
@@ -65,6 +79,79 @@ local function buildPhotoData(catalog, photo)
     return photoData
 end
 
+-- Global state for thumbnail generation
+local generatingThumbnails = {}
+
+-- Helper: Generate JPEG thumbnail asynchronously
+local function generateThumbnailAsync(photo, photoId)
+    generatingThumbnails[photoId] = { status = "generating", data = nil }
+
+    LrTasks.startAsyncTask(function()
+        photo:requestJpegThumbnail(800, 800, function(jpegData)
+            if jpegData and #jpegData > 0 then
+                generatingThumbnails[photoId] = { status = "ready", data = jpegData }
+                logger:info("Generated thumbnail for " .. photoId .. " (" .. #jpegData .. " bytes)")
+            else
+                generatingThumbnails[photoId] = { status = "error", data = nil }
+                logger:info("Failed to generate thumbnail for " .. photoId)
+            end
+        end)
+    end)
+end
+
+function MetadataHandler.getPhotoForReview(args)
+    local catalog = LrApplication.activeCatalog()
+    local photo
+
+    if args and args.photo_id then
+        local numericId = tonumber(args.photo_id)
+        if numericId then
+            catalog:withReadAccessDo(function()
+                photo = catalog:findPhotoByLocalIdentifier(numericId)
+            end)
+        else
+            photo = catalog:findPhotoByPath(args.photo_id)
+            if not photo then
+                local found = catalog:findPhotos({
+                    searchDesc = { criteria = "filename", operation = "==", value = args.photo_id }
+                })
+                if found and #found > 0 then photo = found[1] end
+            end
+        end
+    else
+        photo = catalog:getTargetPhoto()
+    end
+
+    if not photo then
+        return { error = "No photo found" }
+    end
+
+    local photoId = tostring(photo.localIdentifier)
+    local metadata = buildPhotoData(catalog, photo)
+
+    -- Check if thumbnail is already ready
+    local thumbState = generatingThumbnails[photoId]
+    if thumbState and thumbState.status == "ready" and thumbState.data then
+        logger:info("Returning ready thumbnail for " .. photoId)
+        return {
+            imageData = base64Encode(thumbState.data),
+            mimeType = "image/jpeg",
+            metadata = metadata,
+        }
+    end
+
+    -- If not ready, start generation and return immediately with empty data
+    -- (getActivePhoto should have already started this, so it should be ready soon)
+    logger:info("Thumbnail not ready yet for " .. photoId .. ", starting generation")
+    generateThumbnailAsync(photo, photoId)
+
+    return {
+        imageData = nil,
+        metadata = metadata,
+        status = "thumbnail_not_ready",
+    }
+end
+
 function MetadataHandler.getActivePhoto()
     local catalog = LrApplication.activeCatalog()
     local photo = catalog:getTargetPhoto()
@@ -85,7 +172,6 @@ function MetadataHandler.getPhotoMetadata(args)
     local catalog = LrApplication.activeCatalog()
     local photo = nil
 
-    -- Try numeric local identifier first
     local numericId = tonumber(args.photo_id)
     if numericId then
         logger:info("Searching by numeric ID: " .. args.photo_id)
@@ -93,12 +179,10 @@ function MetadataHandler.getPhotoMetadata(args)
             photo = catalog:findPhotoByLocalIdentifier(numericId)
         end)
     else
-        -- Try as absolute file path
         logger:info("Trying findPhotoByPath...")
         photo = catalog:findPhotoByPath(args.photo_id)
         logger:info("findPhotoByPath result: " .. tostring(photo))
 
-        -- Try by filename via findPhotos (native indexed search)
         if not photo then
             logger:info("Trying findPhotos by filename...")
             local found = catalog:findPhotos({

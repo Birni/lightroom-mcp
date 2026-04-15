@@ -8,6 +8,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import cors from "cors";
+import sharp from "sharp";
 
 const HTTP_PORT = 8765;
 
@@ -177,6 +178,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {},
+        },
+      },
+      {
+        name: "get_photo_for_review",
+        description: "Get the photo image (JPEG with current edits applied) plus full metadata for AI review and rating. Returns the actual image so Claude can visually assess composition, sharpness, light, and colors.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            photo_id: {
+              type: "string",
+              description: "Photo ID or file path. If omitted, uses the currently active photo.",
+            },
+          },
         },
       },
       {
@@ -373,14 +387,124 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response.result, null, 2),
-            },
-          ],
-        };
+        // If thumbnail is not ready yet, have the plugin poll again with retries
+        if (response.result && response.result.status === "thumbnail_not_ready") {
+          console.error(`[thumbnail] Not ready, waiting and retrying...`);
+
+          // Wait 500ms and ask plugin again
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Re-queue the same request
+          const retryRequestId = `req_${Date.now()}_${requestIdCounter++}`;
+          const retryRequest: PendingRequest = {
+            id: retryRequestId,
+            action: name,
+            params: args || {},
+            timestamp: Date.now(),
+          };
+          pendingRequests.push(retryRequest);
+
+          // Wait for retry response (up to 10 seconds total)
+          const retryTimeoutMs = 10000;
+          const retryStartTime = Date.now();
+
+          while (Date.now() - retryStartTime < retryTimeoutMs) {
+            if (pendingResponses.has(retryRequestId)) {
+              const retryResponse = pendingResponses.get(retryRequestId)!;
+              pendingResponses.delete(retryRequestId);
+
+              // Process the retry response
+              if (retryResponse.result && retryResponse.result.imageData) {
+                let histogram = null;
+                try {
+                  const buffer = Buffer.from(retryResponse.result.imageData, "base64");
+                  const stats = await sharp(buffer).stats();
+                  const [r, g, b] = stats.channels;
+                  const luminanceMean = 0.299 * r.mean + 0.587 * g.mean + 0.114 * b.mean;
+                  histogram = {
+                    red:   { mean: Math.round(r.mean), stdev: Math.round(r.stdev), min: r.min, max: r.max },
+                    green: { mean: Math.round(g.mean), stdev: Math.round(g.stdev), min: g.min, max: g.max },
+                    blue:  { mean: Math.round(b.mean), stdev: Math.round(b.stdev), min: b.min, max: b.max },
+                    luminance: Math.round(luminanceMean),
+                    highlightsClipped: r.max >= 254 || g.max >= 254 || b.max >= 254,
+                    shadowsClipped:    r.min <= 1   || g.min <= 1   || b.min <= 1,
+                    exposureBias: luminanceMean < 85 ? "underexposed" : luminanceMean > 170 ? "overexposed" : "normal",
+                  };
+                } catch (e) {
+                  console.error("Histogram calculation failed:", e);
+                }
+
+                const metadata = retryResponse.result.metadata || {};
+                if (histogram) metadata.histogram = histogram;
+
+                return {
+                  content: [
+                    {
+                      type: "image",
+                      data: retryResponse.result.imageData,
+                      mimeType: retryResponse.result.mimeType || "image/jpeg",
+                    },
+                    {
+                      type: "text",
+                      text: JSON.stringify(metadata, null, 2),
+                    },
+                  ],
+                };
+              }
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Thumbnail generation timeout. Please try again.",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // If result contains imageData, compute histogram and return as image + metadata
+        if (response.result && response.result.imageData) {
+          let histogram = null;
+          try {
+            const buffer = Buffer.from(response.result.imageData, "base64");
+            const stats = await sharp(buffer).stats();
+            const [r, g, b] = stats.channels;
+            const luminanceMean = 0.299 * r.mean + 0.587 * g.mean + 0.114 * b.mean;
+            histogram = {
+              red:   { mean: Math.round(r.mean), stdev: Math.round(r.stdev), min: r.min, max: r.max },
+              green: { mean: Math.round(g.mean), stdev: Math.round(g.stdev), min: g.min, max: g.max },
+              blue:  { mean: Math.round(b.mean), stdev: Math.round(b.stdev), min: b.min, max: b.max },
+              luminance: Math.round(luminanceMean),
+              highlightsClipped: r.max >= 254 || g.max >= 254 || b.max >= 254,
+              shadowsClipped:    r.min <= 1   || g.min <= 1   || b.min <= 1,
+              exposureBias: luminanceMean < 85 ? "underexposed" : luminanceMean > 170 ? "overexposed" : "normal",
+            };
+          } catch (e) {
+            console.error("Histogram calculation failed:", e);
+          }
+
+          const metadata = response.result.metadata || {};
+          if (histogram) metadata.histogram = histogram;
+
+          return {
+            content: [
+              {
+                type: "image",
+                data: response.result.imageData,
+                mimeType: response.result.mimeType || "image/jpeg",
+              },
+              {
+                type: "text",
+                text: JSON.stringify(metadata, null, 2),
+              },
+            ],
+          };
+        }
       }
 
       // Wait 100ms before checking again
