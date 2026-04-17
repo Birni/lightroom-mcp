@@ -1,6 +1,8 @@
 local LrApplication = import 'LrApplication'
-local LrTasks = import 'LrTasks'
 local LrLogger = import 'LrLogger'
+local LrExportSession = import 'LrExportSession'
+local LrPathUtils = import 'LrPathUtils'
+local LrFileUtils = import 'LrFileUtils'
 
 local logger = LrLogger('LightroomMCP')
 
@@ -79,24 +81,80 @@ local function buildPhotoData(catalog, photo)
     return photoData
 end
 
--- Global state for thumbnail generation
-local generatingThumbnails = {}
+local MAX_BYTES = 786432  -- 750 KB raw → ~1000 KB base64 → fits under MCP 1 MB limit
 
--- Helper: Generate JPEG thumbnail asynchronously
-local function generateThumbnailAsync(photo, photoId)
-    generatingThumbnails[photoId] = { status = "generating", data = nil }
+-- Export the photo as a JPEG to a unique temp directory.
+-- Each call gets its own dir to avoid any file collision between retries.
+-- Returns binary data string, or nil on failure.
+local function exportJpegSync(catalog, photo, quality, maxDim)
+    local tempBase = LrPathUtils.getStandardFilePath('temp')
+    -- Unique dir per quality so retries never collide
+    local exportDir = LrPathUtils.child(tempBase, 'lrmcp_q' .. tostring(quality))
 
-    LrTasks.startAsyncTask(function()
-        photo:requestJpegThumbnail(800, 800, function(jpegData)
-            if jpegData and #jpegData > 0 then
-                generatingThumbnails[photoId] = { status = "ready", data = jpegData }
-                logger:info("Generated thumbnail for " .. photoId .. " (" .. #jpegData .. " bytes)")
-            else
-                generatingThumbnails[photoId] = { status = "error", data = nil }
-                logger:info("Failed to generate thumbnail for " .. photoId)
+    pcall(function() LrFileUtils.delete(exportDir) end)
+    pcall(function() LrFileUtils.createAllDirectories(exportDir) end)
+
+    local resultPath = nil
+    local exportErr = nil
+
+    -- NOTE: Do NOT wrap in pcall — waitForRender() yields, illegal inside pcall in Lua 5.1
+    local exportSession = LrExportSession {
+        photosToExport = { photo },
+        exportSettings = {
+            LR_export_destinationType        = 'specificFolder',
+            LR_export_destinationPathPrefix  = exportDir,
+            LR_export_useSubfolder           = false,
+            LR_format                        = 'JPEG',
+            LR_jpeg_quality                  = quality,
+            LR_size_doConstrain              = true,
+            LR_size_maxWidth                 = maxDim,
+            LR_size_maxHeight                = maxDim,
+            LR_export_colorSpace             = 'sRGB',
+        }
+    }
+
+    for _, rendition in exportSession:renditions() do
+        local success, pathOrMessage = rendition:waitForRender()
+        logger:info("Rendition q" .. quality .. ": success=" .. tostring(success) .. " path=" .. tostring(pathOrMessage))
+        if success then
+            resultPath = pathOrMessage
+        end
+    end
+
+    -- Return the path; caller checks size and reads the file
+    return resultPath
+end
+
+-- Try exporting with decreasing dimension (then quality) until result fits under MAX_BYTES.
+-- Returns filePath, quality, maxDim, fileSize — or nil on total failure.
+local function exportWithSizeLimit(catalog, photo)
+    local steps = {
+        { maxDim = 1400, quality = 75 },
+        { maxDim = 1200, quality = 75 },
+        { maxDim = 1000, quality = 75 },
+        { maxDim = 1000, quality = 60 },
+    }
+
+    for _, step in ipairs(steps) do
+        logger:info("Exporting at " .. step.maxDim .. "px q" .. step.quality)
+        local path = exportJpegSync(catalog, photo, step.quality, step.maxDim)
+        if path then
+            local f = io.open(path, 'rb')
+            if f then
+                local size = f:seek('end')
+                f:close()
+                logger:info("Export: " .. size .. " bytes (limit " .. MAX_BYTES .. ")")
+                if size <= MAX_BYTES then
+                    return path, step.quality, step.maxDim, size
+                end
+                logger:info("Too large, trying next step")
             end
-        end)
-    end)
+        else
+            logger:info("exportJpegSync returned nil at " .. step.maxDim .. "px q" .. step.quality)
+        end
+    end
+
+    return nil, nil, nil, nil
 end
 
 function MetadataHandler.getPhotoForReview(args)
@@ -129,26 +187,28 @@ function MetadataHandler.getPhotoForReview(args)
     local photoId = tostring(photo.localIdentifier)
     local metadata = buildPhotoData(catalog, photo)
 
-    -- Check if thumbnail is already ready
-    local thumbState = generatingThumbnails[photoId]
-    if thumbState and thumbState.status == "ready" and thumbState.data then
-        logger:info("Returning ready thumbnail for " .. photoId)
+    -- Export fresh render — auto-retries at lower quality if > 1 MB
+    -- Returns file path (MCP server reads the file directly — avoids large HTTP POST)
+    local exportPath, usedQuality, usedMaxDim, fileSize = exportWithSizeLimit(catalog, photo)
+    if exportPath then
+        logger:info("Final export: " .. fileSize .. " bytes, q" .. usedQuality .. " " .. usedMaxDim .. "px at " .. exportPath)
         return {
-            imageData = base64Encode(thumbState.data),
-            mimeType = "image/jpeg",
-            metadata = metadata,
+            imagePath  = exportPath,
+            mimeType   = "image/jpeg",
+            metadata   = metadata,
+            exportInfo = {
+                fileSize = fileSize,
+                quality  = usedQuality,
+                maxDim   = usedMaxDim,
+            },
         }
     end
 
-    -- If not ready, start generation and return immediately with empty data
-    -- (getActivePhoto should have already started this, so it should be ready soon)
-    logger:info("Thumbnail not ready yet for " .. photoId .. ", starting generation")
-    generateThumbnailAsync(photo, photoId)
-
+    logger:info("Export failed for " .. photoId)
     return {
         imageData = nil,
-        metadata = metadata,
-        status = "thumbnail_not_ready",
+        metadata  = metadata,
+        status    = "render_failed",
     }
 end
 

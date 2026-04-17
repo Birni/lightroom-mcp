@@ -78,6 +78,8 @@ local function pollServer()
         result = CollectionsHandler.listCollections(data.params)
     elseif data.action == "get_photo_metadata" then
         result = MetadataHandler.getPhotoMetadata(data.params)
+    elseif data.action == "get_photo_for_review" then
+        result = MetadataHandler.getPhotoForReview(data.params)
     elseif data.action == "get_active_photo" then
         result = MetadataHandler.getActivePhoto()
     elseif data.action == "search_photos" then
@@ -110,11 +112,11 @@ local function pollServer()
     addLog("JSON encoded successfully")
     addLog("Sending response to server...")
     addLog("URL: " .. MCP_SERVER_URL .. "/submit-response")
-    addLog("Payload: " .. responseData)
+    addLog("Payload size: " .. #responseData .. " bytes")
 
     local submitResponse, submitHeaders = LrHttp.post(MCP_SERVER_URL .. "/submit-response", responseData, {
         { field = "Content-Type", value = "application/json" }
-    }, 5)
+    }, 15)
 
     addLog("HTTP POST returned: " .. tostring(submitResponse))
 

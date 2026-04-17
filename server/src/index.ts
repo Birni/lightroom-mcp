@@ -9,6 +9,7 @@ import {
 import express from "express";
 import cors from "cors";
 import sharp from "sharp";
+import fs from "fs";
 
 const HTTP_PORT = 8765;
 
@@ -56,7 +57,10 @@ app.post("/submit-response", (req, res) => {
     return;
   }
 
-  console.error(`[response] Plugin submitted response for: ${id}${error ? ` (error: ${error})` : ""}`);
+  const resultSummary = result
+    ? (result.imageData ? `imageData=${result.imageData.length}chars` : `status=${result.status || "ok"} debug_state=${result.debug_state || "-"} keys=${Object.keys(result).join(",")}`)
+    : "no result";
+  console.error(`[response] Plugin submitted response for: ${id}${error ? ` (error: ${error})` : ""} | ${resultSummary}`);
   pendingResponses.set(id, { id, result, error });
   res.json({ success: true });
 });
@@ -95,6 +99,14 @@ app.post("/debug/queue-request", (req, res) => {
     requestId,
     message: "Request queued. Plugin will pick it up on next poll."
   });
+});
+
+// Debug endpoint to read and drain pending responses (for testing)
+app.get("/debug/responses", (req, res) => {
+  const all: any[] = [];
+  pendingResponses.forEach((v, k) => all.push(v));
+  pendingResponses.clear();
+  res.json({ count: all.length, responses: all });
 });
 
 // Start HTTP server
@@ -366,8 +378,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     pendingRequests.push(pendingRequest);
 
-    // Wait for response with timeout (30 seconds)
-    const timeoutMs = 30000;
+    // Wait for response with timeout (50 seconds — plugin retries internally for up to ~40s)
+    const timeoutMs = 50000;
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeoutMs) {
@@ -387,91 +399,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // If thumbnail is not ready yet, have the plugin poll again with retries
-        if (response.result && response.result.status === "thumbnail_not_ready") {
-          console.error(`[thumbnail] Not ready, waiting and retrying...`);
-
-          // Wait 500ms and ask plugin again
-          await new Promise((resolve) => setTimeout(resolve, 500));
-
-          // Re-queue the same request
-          const retryRequestId = `req_${Date.now()}_${requestIdCounter++}`;
-          const retryRequest: PendingRequest = {
-            id: retryRequestId,
-            action: name,
-            params: args || {},
-            timestamp: Date.now(),
-          };
-          pendingRequests.push(retryRequest);
-
-          // Wait for retry response (up to 10 seconds total)
-          const retryTimeoutMs = 10000;
-          const retryStartTime = Date.now();
-
-          while (Date.now() - retryStartTime < retryTimeoutMs) {
-            if (pendingResponses.has(retryRequestId)) {
-              const retryResponse = pendingResponses.get(retryRequestId)!;
-              pendingResponses.delete(retryRequestId);
-
-              // Process the retry response
-              if (retryResponse.result && retryResponse.result.imageData) {
-                let histogram = null;
-                try {
-                  const buffer = Buffer.from(retryResponse.result.imageData, "base64");
-                  const stats = await sharp(buffer).stats();
-                  const [r, g, b] = stats.channels;
-                  const luminanceMean = 0.299 * r.mean + 0.587 * g.mean + 0.114 * b.mean;
-                  histogram = {
-                    red:   { mean: Math.round(r.mean), stdev: Math.round(r.stdev), min: r.min, max: r.max },
-                    green: { mean: Math.round(g.mean), stdev: Math.round(g.stdev), min: g.min, max: g.max },
-                    blue:  { mean: Math.round(b.mean), stdev: Math.round(b.stdev), min: b.min, max: b.max },
-                    luminance: Math.round(luminanceMean),
-                    highlightsClipped: r.max >= 254 || g.max >= 254 || b.max >= 254,
-                    shadowsClipped:    r.min <= 1   || g.min <= 1   || b.min <= 1,
-                    exposureBias: luminanceMean < 85 ? "underexposed" : luminanceMean > 170 ? "overexposed" : "normal",
-                  };
-                } catch (e) {
-                  console.error("Histogram calculation failed:", e);
-                }
-
-                const metadata = retryResponse.result.metadata || {};
-                if (histogram) metadata.histogram = histogram;
-
-                return {
-                  content: [
-                    {
-                      type: "image",
-                      data: retryResponse.result.imageData,
-                      mimeType: retryResponse.result.mimeType || "image/jpeg",
-                    },
-                    {
-                      type: "text",
-                      text: JSON.stringify(metadata, null, 2),
-                    },
-                  ],
-                };
-              }
-              break;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Thumbnail generation timeout. Please try again.",
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        // If result contains imageData, compute histogram and return as image + metadata
-        if (response.result && response.result.imageData) {
+        // Helper to build image+metadata response with histogram
+        const buildImageResponse = async (result: any) => {
           let histogram = null;
           try {
-            const buffer = Buffer.from(response.result.imageData, "base64");
+            const buffer = Buffer.from(result.imageData, "base64");
             const stats = await sharp(buffer).stats();
             const [r, g, b] = stats.channels;
             const luminanceMean = 0.299 * r.mean + 0.587 * g.mean + 0.114 * b.mean;
@@ -487,24 +419,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           } catch (e) {
             console.error("Histogram calculation failed:", e);
           }
-
-          const metadata = response.result.metadata || {};
+          const metadata = result.metadata || {};
           if (histogram) metadata.histogram = histogram;
-
+          if (result.exportInfo) metadata.exportInfo = result.exportInfo;
           return {
             content: [
-              {
-                type: "image",
-                data: response.result.imageData,
-                mimeType: response.result.mimeType || "image/jpeg",
-              },
-              {
-                type: "text",
-                text: JSON.stringify(metadata, null, 2),
-              },
+              { type: "image", data: result.imageData, mimeType: result.mimeType || "image/jpeg" },
+              { type: "text", text: JSON.stringify(metadata, null, 2) },
             ],
           };
+        };
+
+        // Image response via file path (get_photo_for_review)
+        if (response.result && response.result.imagePath) {
+          const winPath: string = response.result.imagePath;
+          // Convert Windows path to WSL path: C:\foo\bar → /mnt/c/foo/bar
+          const wslPath = "/mnt/" + winPath[0].toLowerCase() + winPath.slice(2).replace(/\\/g, "/");
+          console.error(`[image] Reading from WSL path: ${wslPath}`);
+          const imageBuffer = fs.readFileSync(wslPath);
+          const imageData = imageBuffer.toString("base64");
+          return buildImageResponse({ ...response.result, imageData });
         }
+
+        // Legacy: imageData already base64-encoded in response
+        if (response.result && response.result.imageData) {
+          return buildImageResponse(response.result);
+        }
+
+        // Non-image response (metadata, search, collections, etc.)
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(response.result, null, 2),
+            },
+          ],
+        };
       }
 
       // Wait 100ms before checking again
