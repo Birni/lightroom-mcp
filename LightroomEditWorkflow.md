@@ -156,9 +156,30 @@ Standard-Varianten für **Landschaft** (Default, wenn Motiv-Typ nicht eindeutig)
 
 | Variante | Charakter | Typischer Zweck |
 |---|---|---|
-| **A — Dokumentarisch** | moderate Kontraste, natürliche Farben, Felsen offen, Matte-Lift in Tiefen, **CG bewusst aus** | Publikation, Reportage, Archiv |
-| **B — Cool-Dramatic** | tiefe Schwarzpunkte, hohe Weißpunkte, Blau/Aqua HSL-Push, Vignette, warm-amber CG Shadows (gegen Felsen-Verblauen) | Instagram, Stil Matthias |
-| **C — Teal/Orange Cinematic** | Variante A/B + Color Grading Shadows 35°/Lights 210° (sat ≥10) | Filmischer Look, Farbtrennung |
+| **A — Dokumentarisch** | moderate Kontraste, natürliche Farben, Felsen offen, Matte-Lift in Tiefen, CG optional dezent (sat 10, Richtung aus Analyse) | Publikation, Reportage, Archiv |
+| **B — Dramatisch** | tiefe Schwarzpunkte, hohe Weißpunkte, dominante-Farbe HSL-Push, Vignette, CG sat ≥15 (Richtung aus Analyse) | Instagram, Portfolio, Druck |
+| **C — Kontext-Wildcard** | dritte Variante passt sich dem Bildinhalt an — siehe Kontext-Tabelle unten | Stilexploration, Abwechslung |
+
+**CG-Richtung aus Analyse ableiten:**
+
+| Signal | Shadows-Hue | Highlights-Hue | Logik |
+|---|---|---|---|
+| `dark.bMinusR` < −20 (Schatten schon warm) | kühl (210–220°) | warm (35–45°) | Gegenpol setzen, Separation verstärken |
+| `dark.bMinusR` > +10 (Schatten schon kühl) | warm (30–45°) | kühl (200–220°) | Gegenpol setzen, Felsen/Struktur nicht weiter verkühlen |
+| `tempSpread` < 20 (kaum Farbtrennung) | warm (35°) | kühl (210°) | Split erzeugen wo keiner ist |
+| `tempSpread` > 50 (starke Trennung) | CG sparsam oder aus | CG sparsam oder aus | Vorhandene Separation reicht, CG kippt schnell |
+| Warmes Licht dominant (`bMinusR` < −25) | kühl (210°) | warm beibehalten oder neutral | Kühle Schatten als Anker gegen Gesamtwärme |
+
+**Kontext-Tabelle für Variante C:**
+
+| Bildkontext | Variante C wird zu | Charakter |
+|---|---|---|
+| Szene hat natürliche Warm/Kalt-Trennung (tempSpread 25–50) | **Cinematic Split** | CG-Richtung aus Tabelle oben, sat ≥10, Farbtrennung verstärken |
+| Monochrome/farbarme Szene (hueDistr. ≥90% ein Bucket, unsaturatedPct >60%) | **Schwarzweiß** | Kontrast-getrieben, Rotfilter-Simulation für Himmel-Drama |
+| Nebel, Dunst, weiches Licht (DR <4, saturation median <15) | **Atmosphärisch/Soft** | Lifted Blacks (+tone_shadows +15–20), reduzierter Kontrast, Pastelltöne, kein Dehaze |
+| Warmes Licht dominant (bMinusR < −25, Orange/Yellow >50%) | **Warm-Dramatic** | Wie B, aber warme Farbtemperatur beibehalten statt kühl ziehen |
+
+*Schwellenwerte vorläufig — wird über Sessions kalibriert.*
 
 Für Wildlife/Stadt siehe Motiv-Profile.
 
@@ -667,6 +688,7 @@ Manche Travel-Bilder sind Mischformen — z.B. ein Tier in einer Landschaft, ode
 
 ## Changelog
 
+- **v3.6** — Zwei Änderungen aus Session 4F4A3282 (Bark Europa, Umweltporträt mit Gletscherpanorama): (1) **Variante A CG-Regel gelockert**: „CG bewusst aus" → „CG optional dezent (sat 10, Richtung aus Analyse)". Dezentes Color Grading und Dokumentarisch schließen sich nicht aus, solange es die vorhandene Stimmung unterstützt statt eine neue aufzudrücken. (2) **Variante C von fixem Teal/Orange zu Kontext-Wildcard umgebaut**: Dritte Variante passt sich dem Bildinhalt an — Cinematic Split bei natürlicher Warm/Kalt-Trennung, Schwarzweiß bei monochromen Szenen, Atmosphärisch/Soft bei Nebel/Dunst, Warm-Dramatic bei warmem Licht. Auswahl über Analyse-Signale (`tempSpread`, `hueDistribution`, `DR`, `bMinusR`). (3) **CG-Richtungstabelle ergänzt**: Shadows/Highlig
 - **v3.5** — Drei 🔴-Eigenfehler aus einer Session (Bark Europa, Antarktis-Küstenlandschaft 4F4A3249) zu einer kohärenten Änderung zusammengefasst, weil alle denselben Root-Cause haben — fehlende Sektions-Schablone in Phase 3. Ergänzungen: (1) Phase 3 **Pre-Set Sektions-Checkliste** über alle 6 LR-Panels (Grundeinstellungen / Kurve / HSL / Color Grading / Details / Effekte), auch wenn bewusst 0; (2) Anhang A **Sanity-Check-Liste** mit konkreten Parameter-Regeln (cg_*_sat 0 oder ≥10, sharpen_masking nie bei 0 für Landschaft/Stadt, tone_* als Pflicht bei Memory-Präferenz); (3) Anhang C **Schärfungs-Baselines** als Tabelle pro Kamera und Motiv-Typ inkl. Maskieren-Wert; (4) Anhang D pro Motiv-Profil jetzt Schärfungs-Baselines und Kurven-Defaults redundant aufgeführt für schnelleren Lookup in Phase 3; (5) Phase 5 **Masken-Reihenfolge und Interaktions-Warnung** (Himmel-AI-Maske blutet in Schneeberge → Schnee-Bereichsmaske verstärken oder Reality-Check einbauen); (6) Phase 6 Checkliste um `whites%`-Einbruch nach Himmel-Maske ergänzt; (7) Snapshot-Schema um `_vN`-Suffix erweitert für Korrektur-Iterationen; (8) Phase 9 Akkumulationsregel um Root-Cause-Cluster-Ausnahme erweitert (mehrere 🔴 mit gleicher Ursache = eine Änderung, sofort).
 - **v3.4** — Phase 9 (Workflow-Retrospektive) hinzugefügt: strukturierte Reflexion nach Session mit Template, Trigger-Bedingungen und Akkumulationsregel. Anhang A erweitert um Diagnose-Regel bei unerwartetem Tool-Verhalten (temperature-Lektion), Snapshot-Namenskonvention (Nummernpräfixe statt willkürliche Sternchen). Selbstreferenziell: Diese Version ist das erste Retrospektive-Ergebnis, angewandt auf die eigene Entstehungssession.
 - **v3.3** — Phase 2c (Zuschnitt & Ausrichtung) eingefügt zwischen Auto-Check und Varianten-Berechnung.
