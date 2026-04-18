@@ -235,6 +235,11 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
         },
       },
       {
+        name: "list_keywords",
+        description: "List all keywords in the Lightroom catalog as a tree (name, id, children).",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
         name: "list_collections",
         description: "List all collections in Lightroom catalog",
         inputSchema: {

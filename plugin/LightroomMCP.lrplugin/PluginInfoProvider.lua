@@ -89,6 +89,8 @@ local function pollServer()
         result = MetadataHandler.getActivePhoto()
     elseif data.action == "search_photos" then
         result = SearchHandler.searchPhotos(data.params)
+    elseif data.action == "list_keywords" then
+        result = SearchHandler.listKeywords()
     elseif data.action == "set_keywords" then
         result = OrganizationHandler.setKeywords(data.params)
     elseif data.action == "set_rating" then

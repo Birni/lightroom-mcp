@@ -132,4 +132,26 @@ function SearchHandler.searchPhotos(args)
     }
 end
 
+local function buildKeywordTree(keyword)
+    local node = { name = keyword:getName(), id = keyword.localIdentifier }
+    local children = keyword:getChildren()
+    if children and #children > 0 then
+        node.children = {}
+        for _, child in ipairs(children) do
+            table.insert(node.children, buildKeywordTree(child))
+        end
+    end
+    return node
+end
+
+function SearchHandler.listKeywords()
+    local catalog = LrApplication.activeCatalog()
+    local rootKeywords = catalog:getKeywords()
+    local keywords = {}
+    for _, kw in ipairs(rootKeywords) do
+        table.insert(keywords, buildKeywordTree(kw))
+    end
+    return { count = #keywords, keywords = keywords }
+end
+
 return SearchHandler
