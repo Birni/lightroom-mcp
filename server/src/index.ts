@@ -178,7 +178,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             photo_id: {
               type: "string",
-              description: "Photo ID or file path",
+              description: "Full file path (e.g. E:/pictures/photo.CR3)",
             },
           },
           required: ["photo_id"],
@@ -198,7 +198,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {
-            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
+            photo_id: { type: "string", description: "Full file path (e.g. E:/pictures/photo.CR3). Omit for active photo." },
           },
         },
       },
@@ -220,7 +220,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
         inputSchema: {
           type: "object",
           properties: {
-            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
+            photo_id: { type: "string", description: "Full file path (e.g. E:/pictures/photo.CR3). Omit for active photo." },
           },
         },
       },
@@ -230,7 +230,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
         inputSchema: {
           type: "object",
           properties: {
-            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
+            photo_id: { type: "string", description: "Full file path (e.g. E:/pictures/photo.CR3). Omit for active photo." },
           },
         },
       },
@@ -273,7 +273,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
             photo_ids: {
               type: "array",
               items: { type: "string" },
-              description: "Array of photo IDs or file paths",
+              description: "Array of full file paths (e.g. E:/pictures/photo.CR3)",
             },
           },
           required: ["collection_name", "photo_ids"],
@@ -288,7 +288,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
             photo_ids: {
               type: "array",
               items: { type: "string" },
-              description: "Array of photo IDs or file paths",
+              description: "Array of full file paths (e.g. E:/pictures/photo.CR3)",
             },
             add_keywords: {
               type: "array",
@@ -313,7 +313,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
             photo_ids: {
               type: "array",
               items: { type: "string" },
-              description: "Array of photo IDs or file paths",
+              description: "Array of full file paths (e.g. E:/pictures/photo.CR3)",
             },
             rating: {
               type: "number",
@@ -331,7 +331,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
         inputSchema: {
           type: "object",
           properties: {
-            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
+            photo_id: { type: "string", description: "Full file path (e.g. E:/pictures/photo.CR3). Omit for active photo." },
             auto_tone: { type: "boolean", description: "Let Lightroom set auto tone before applying other values" },
             auto_white_balance: { type: "boolean", description: "Let Lightroom set auto white balance before applying other values" },
             temperature: { type: "number" }, tint: { type: "number" },
@@ -382,7 +382,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
           type: "object",
           properties: {
             name: { type: "string", description: "Snapshot name" },
-            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
+            photo_id: { type: "string", description: "Full file path (e.g. E:/pictures/photo.CR3). Omit for active photo." },
           },
           required: ["name"],
         },
@@ -393,7 +393,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
         inputSchema: {
           type: "object",
           properties: {
-            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
+            photo_id: { type: "string", description: "Full file path (e.g. E:/pictures/photo.CR3). Omit for active photo." },
           },
         },
       },
@@ -404,7 +404,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
           type: "object",
           properties: {
             snapshot_id: { type: "string", description: "Snapshot ID from list_snapshots" },
-            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
+            photo_id: { type: "string", description: "Full file path (e.g. E:/pictures/photo.CR3). Omit for active photo." },
           },
           required: ["snapshot_id"],
         },
@@ -440,7 +440,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
             photo_ids: {
               type: "array",
               items: { type: "string" },
-              description: "Array of photo IDs or file paths to export",
+              description: "Array of full file paths (e.g. E:/pictures/photo.CR3) to export",
             },
             destination: {
               type: "string",
