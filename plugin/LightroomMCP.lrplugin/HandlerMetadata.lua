@@ -97,8 +97,8 @@ local MAX_BYTES = 786432  -- 750 KB raw → ~1000 KB base64 → fits under MCP 1
 -- Returns binary data string, or nil on failure.
 local function exportJpegSync(catalog, photo, quality, maxDim)
     local tempBase = LrPathUtils.getStandardFilePath('temp')
-    -- Unique dir per quality so retries never collide
-    local exportDir = LrPathUtils.child(tempBase, 'lrmcp_q' .. tostring(quality))
+    -- Unique dir per dimension+quality so steps never share a folder
+    local exportDir = LrPathUtils.child(tempBase, 'lrmcp_' .. tostring(maxDim) .. '_q' .. tostring(quality))
 
     pcall(function() LrFileUtils.delete(exportDir) end)
     pcall(function() LrFileUtils.createAllDirectories(exportDir) end)
@@ -142,6 +142,8 @@ local function exportWithSizeLimit(catalog, photo)
         { maxDim = 1200, quality = 75 },
         { maxDim = 1000, quality = 75 },
         { maxDim = 1000, quality = 60 },
+        { maxDim = 800,  quality = 60 },
+        { maxDim = 800,  quality = 50 },
     }
 
     for _, step in ipairs(steps) do
