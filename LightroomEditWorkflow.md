@@ -287,15 +287,15 @@ Die Reihenfolge, in der Masken gesetzt werden, beeinflusst das Ergebnis sichtbar
 
 ---
 
-## Phase 7 — Metadaten
-
 ### 7a — Keyword-Vorschlag
 
 **Claude tut:**
-- Aus Motiv + EXIF + Session-Kontext 5 Keywords vorschlagen
-- Hierarchie: Ort → Motiv → Genre → Stimmung/Stil → Trip/Projekt
+1. `lightroom:list_keywords` → bestehende Keywords im Katalog abfragen
+2. Aus Motiv + EXIF + Session-Kontext 5 Keywords vorschlagen
+3. **Bestehende Keywords bevorzugen** — nur neue anlegen, wenn kein passendes existiert
+4. Hierarchie: Ort → Motiv → Genre → Stimmung/Stil → Trip/Projekt
 
-**Claude gibt aus:** 5 Keywords mit 1-Wort-Begründung, fragt nach Bestätigung
+**Claude gibt aus:** 5 Keywords mit 1-Wort-Begründung. Bestehende mit ✅ markiert, neue mit 🆕. Fragt nach Bestätigung.
 
 ### 🛑 Feedback-Stelle 5
 
@@ -687,7 +687,7 @@ Manche Travel-Bilder sind Mischformen — z.B. ein Tier in einer Landschaft, ode
 ---
 
 ## Changelog
-
+- **v3.7** — Phase 7a: `list_keywords` vor Keyword-Vorschlag verpflichtend, bestehende Keywords bevorzugen (✅/🆕-Markierung).
 - **v3.6** — Zwei Änderungen aus Session 4F4A3282 (Bark Europa, Umweltporträt mit Gletscherpanorama): (1) **Variante A CG-Regel gelockert**: „CG bewusst aus" → „CG optional dezent (sat 10, Richtung aus Analyse)". Dezentes Color Grading und Dokumentarisch schließen sich nicht aus, solange es die vorhandene Stimmung unterstützt statt eine neue aufzudrücken. (2) **Variante C von fixem Teal/Orange zu Kontext-Wildcard umgebaut**: Dritte Variante passt sich dem Bildinhalt an — Cinematic Split bei natürlicher Warm/Kalt-Trennung, Schwarzweiß bei monochromen Szenen, Atmosphärisch/Soft bei Nebel/Dunst, Warm-Dramatic bei warmem Licht. Auswahl über Analyse-Signale (`tempSpread`, `hueDistribution`, `DR`, `bMinusR`). (3) **CG-Richtungstabelle ergänzt**: Shadows/Highlig
 - **v3.5** — Drei 🔴-Eigenfehler aus einer Session (Bark Europa, Antarktis-Küstenlandschaft 4F4A3249) zu einer kohärenten Änderung zusammengefasst, weil alle denselben Root-Cause haben — fehlende Sektions-Schablone in Phase 3. Ergänzungen: (1) Phase 3 **Pre-Set Sektions-Checkliste** über alle 6 LR-Panels (Grundeinstellungen / Kurve / HSL / Color Grading / Details / Effekte), auch wenn bewusst 0; (2) Anhang A **Sanity-Check-Liste** mit konkreten Parameter-Regeln (cg_*_sat 0 oder ≥10, sharpen_masking nie bei 0 für Landschaft/Stadt, tone_* als Pflicht bei Memory-Präferenz); (3) Anhang C **Schärfungs-Baselines** als Tabelle pro Kamera und Motiv-Typ inkl. Maskieren-Wert; (4) Anhang D pro Motiv-Profil jetzt Schärfungs-Baselines und Kurven-Defaults redundant aufgeführt für schnelleren Lookup in Phase 3; (5) Phase 5 **Masken-Reihenfolge und Interaktions-Warnung** (Himmel-AI-Maske blutet in Schneeberge → Schnee-Bereichsmaske verstärken oder Reality-Check einbauen); (6) Phase 6 Checkliste um `whites%`-Einbruch nach Himmel-Maske ergänzt; (7) Snapshot-Schema um `_vN`-Suffix erweitert für Korrektur-Iterationen; (8) Phase 9 Akkumulationsregel um Root-Cause-Cluster-Ausnahme erweitert (mehrere 🔴 mit gleicher Ursache = eine Änderung, sofort).
 - **v3.4** — Phase 9 (Workflow-Retrospektive) hinzugefügt: strukturierte Reflexion nach Session mit Template, Trigger-Bedingungen und Akkumulationsregel. Anhang A erweitert um Diagnose-Regel bei unerwartetem Tool-Verhalten (temperature-Lektion), Snapshot-Namenskonvention (Nummernpräfixe statt willkürliche Sternchen). Selbstreferenziell: Diese Version ist das erste Retrospektive-Ergebnis, angewandt auf die eigene Entstehungssession.
