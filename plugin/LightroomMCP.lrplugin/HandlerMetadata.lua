@@ -8,18 +8,27 @@ local logger = LrLogger('LightroomMCP')
 
 local MetadataHandler = {}
 
-local function base64Encode(data)
-    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-    return ((data:gsub('.', function(x)
-        local r, byte = '', x:byte()
-        for i = 8, 1, -1 do r = r .. (byte % 2^i - byte % 2^(i-1) > 0 and '1' or '0') end
-        return r
-    end) .. '0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
-        if #x < 6 then return '' end
-        local c = 0
-        for i = 1, 6 do c = c + (x:sub(i, i) == '1' and 2^(6-i) or 0) end
-        return b:sub(c+1, c+1)
-    end) .. ({ '', '==', '=' })[#data % 3 + 1])
+-- Shared photo lookup: by numeric ID, path, filename, or active photo
+local function lookupPhoto(catalog, args)
+    if args and args.photo_id then
+        local numericId = tonumber(args.photo_id)
+        if numericId then
+            local photo = nil
+            catalog:withReadAccessDo(function()
+                photo = catalog:findPhotoByLocalIdentifier(numericId)
+            end)
+            return photo
+        end
+        local photo = catalog:findPhotoByPath(args.photo_id)
+        if not photo then
+            local found = catalog:findPhotos({
+                searchDesc = { criteria = "filename", operation = "==", value = args.photo_id }
+            })
+            if found and #found > 0 then return found[1] end
+        end
+        return photo
+    end
+    return catalog:getTargetPhoto()
 end
 
 local function sanitize(value)
@@ -157,59 +166,46 @@ local function exportWithSizeLimit(catalog, photo)
     return nil, nil, nil, nil
 end
 
-function MetadataHandler.getPhotoForReview(args)
-    local catalog = LrApplication.activeCatalog()
-    local photo
-
-    if args and args.photo_id then
-        local numericId = tonumber(args.photo_id)
-        if numericId then
-            catalog:withReadAccessDo(function()
-                photo = catalog:findPhotoByLocalIdentifier(numericId)
-            end)
-        else
-            photo = catalog:findPhotoByPath(args.photo_id)
-            if not photo then
-                local found = catalog:findPhotos({
-                    searchDesc = { criteria = "filename", operation = "==", value = args.photo_id }
-                })
-                if found and #found > 0 then photo = found[1] end
-            end
-        end
-    else
-        photo = catalog:getTargetPhoto()
-    end
-
-    if not photo then
-        return { error = "No photo found" }
-    end
-
-    local photoId = tostring(photo.localIdentifier)
-    local metadata = buildPhotoData(catalog, photo)
-
-    -- Export fresh render — auto-retries at lower quality if > 1 MB
-    -- Returns file path (MCP server reads the file directly — avoids large HTTP POST)
+-- Shared export helper: export active/specified photo, return file path only
+local function exportPhoto(catalog, photo)
     local exportPath, usedQuality, usedMaxDim, fileSize = exportWithSizeLimit(catalog, photo)
-    if exportPath then
-        logger:info("Final export: " .. fileSize .. " bytes, q" .. usedQuality .. " " .. usedMaxDim .. "px at " .. exportPath)
-        return {
-            imagePath  = exportPath,
-            mimeType   = "image/jpeg",
-            metadata   = metadata,
-            exportInfo = {
-                fileSize = fileSize,
-                quality  = usedQuality,
-                maxDim   = usedMaxDim,
-            },
-        }
-    end
+    if not exportPath then return nil end
+    logger:info("Exported: " .. fileSize .. " bytes q" .. usedQuality .. " " .. usedMaxDim .. "px")
+    return exportPath
+end
 
-    logger:info("Export failed for " .. photoId)
-    return {
-        imageData = nil,
-        metadata  = metadata,
-        status    = "render_failed",
-    }
+-- get_photo: image only, no metadata (server returns bare image block)
+function MetadataHandler.getPhoto(args)
+    local catalog = LrApplication.activeCatalog()
+    local photo = lookupPhoto(catalog, args)
+    if not photo then return { error = "No photo found" } end
+    local path = exportPhoto(catalog, photo)
+    if not path then return { error = "Export failed" } end
+    return { imagePath = path, mimeType = "image/jpeg" }
+end
+
+-- analyze_raw_photo: return RAW file path — server extracts embedded JPEG and analyses
+function MetadataHandler.analyzeRawPhoto(args)
+    local catalog = LrApplication.activeCatalog()
+    local photo = lookupPhoto(catalog, args)
+    if not photo then return { error = "No photo found" } end
+    local rawPath = nil
+    catalog:withReadAccessDo(function()
+        rawPath = photo:getRawMetadata('path')
+    end)
+    if not rawPath then return { error = "Could not get RAW path" } end
+    logger:info("analyzeRawPhoto: " .. rawPath)
+    return { rawPath = rawPath, photoId = tostring(photo.localIdentifier) }
+end
+
+-- analyze_edit: export with current LR settings — server analyses + returns image + JSON
+function MetadataHandler.analyzeEdit(args)
+    local catalog = LrApplication.activeCatalog()
+    local photo = lookupPhoto(catalog, args)
+    if not photo then return { error = "No photo found" } end
+    local path = exportPhoto(catalog, photo)
+    if not path then return { error = "Export failed" } end
+    return { imagePath = path, mimeType = "image/jpeg" }
 end
 
 function MetadataHandler.getActivePhoto()

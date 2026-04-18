@@ -8,8 +8,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import cors from "cors";
-import sharp from "sharp";
 import fs from "fs";
+import { extractEmbeddedJpeg, analyzeImage } from "./analyzePhoto.js";
 
 const HTTP_PORT = 8765;
 
@@ -193,15 +193,44 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "get_photo_for_review",
-        description: "Get the photo image (JPEG with current edits applied) plus full metadata for AI review and rating. Returns the actual image so Claude can visually assess composition, sharpness, light, and colors.",
+        name: "get_photo",
+        description: "Get the active photo as a JPEG for quick visual inspection. Returns only the image — no metadata, no analysis. Use analyze_raw_photo or analyze_edit for quantitative data.",
         inputSchema: {
           type: "object",
           properties: {
-            photo_id: {
-              type: "string",
-              description: "Photo ID or file path. If omitted, uses the currently active photo.",
-            },
+            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
+          },
+        },
+      },
+      {
+        name: "analyze_raw_photo",
+        description: `Pixel-level analysis of the RAW file using its embedded full-res JPEG preview (pre-edit, as shot). Returns quantitative metrics for editing decisions — no image transfer.
+
+Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long edge):
+- luminance: mean, std, p1/p5/p25/p50/p75/p95/p99, dynamicRangeStops=log2(p99/p1)
+- clipping: highlightsClippedPct=luma>250, shadowsClippedPct=luma<5, warnPct thresholds at 245/15
+- tonalDistribution (%): blacks<26, shadows<64, darkMids<128, lightMids<192, highlights<230, whites<256
+- tonalClusters: dark=luma<p25, mid=p25-p75, bright=luma≥p75 — per cluster: r/g/b/meanLum/bMinusR. tempSpread=bright.bMinusR-dark.bMinusR
+- spatial.thirds: [top,mid,bottom] meanLum — geometric thirds, NOT semantic (interpret as sky/mid/ground only for landscape)
+- spatial.grid3x3: 3×3 meanLum grid [row][col]
+- color.bMinusR: mean(B)-mean(R) — positive=cool, negative=warm
+- color.gMinusM: mean(G)-(mean(R)+mean(B))/2 — positive=green cast, negative=magenta
+- color.saturation: mean/median/p95 on 0-100 scale. isMonochromatic=median<25
+- color.hueDistribution: 8 LR HSL buckets (red=345-15°,orange=15-45°,yellow=45-75°,green=75-165°,aqua=165-195°,blue=195-255°,purple=255-285°,magenta=285-345°), excludes HSV-S<10%. dominant=buckets>5%`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
+          },
+        },
+      },
+      {
+        name: "analyze_edit",
+        description: "Export the active photo with current Lightroom develop settings and run the same pixel analysis as analyze_raw_photo. Returns both the JPEG image (for visual review) and the full analysis JSON. Use after applying edits to verify the result.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            photo_id: { type: "string", description: "Photo ID or path. Omit for active photo." },
           },
         },
       },
@@ -399,61 +428,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // Helper to build image+metadata response with histogram
-        const buildImageResponse = async (result: any) => {
-          let histogram = null;
-          try {
-            const buffer = Buffer.from(result.imageData, "base64");
-            const stats = await sharp(buffer).stats();
-            const [r, g, b] = stats.channels;
-            const luminanceMean = 0.299 * r.mean + 0.587 * g.mean + 0.114 * b.mean;
-            histogram = {
-              red:   { mean: Math.round(r.mean), stdev: Math.round(r.stdev), min: r.min, max: r.max },
-              green: { mean: Math.round(g.mean), stdev: Math.round(g.stdev), min: g.min, max: g.max },
-              blue:  { mean: Math.round(b.mean), stdev: Math.round(b.stdev), min: b.min, max: b.max },
-              luminance: Math.round(luminanceMean),
-              highlightsClipped: r.max >= 254 || g.max >= 254 || b.max >= 254,
-              shadowsClipped:    r.min <= 1   || g.min <= 1   || b.min <= 1,
-              exposureBias: luminanceMean < 85 ? "underexposed" : luminanceMean > 170 ? "overexposed" : "normal",
-            };
-          } catch (e) {
-            console.error("Histogram calculation failed:", e);
-          }
-          const metadata = result.metadata || {};
-          if (histogram) metadata.histogram = histogram;
-          if (result.exportInfo) metadata.exportInfo = result.exportInfo;
+        const res = response.result;
+
+        // Helper: Windows path → WSL path
+        const toWslPath = (p: string) =>
+          "/mnt/" + p[0].toLowerCase() + p.slice(2).replace(/\\/g, "/");
+
+        // ── get_photo: bare image, no analysis ───────────────────────────
+        if (name === "get_photo" && res?.imagePath) {
+          const buf = fs.readFileSync(toWslPath(res.imagePath));
           return {
             content: [
-              { type: "image", data: result.imageData, mimeType: result.mimeType || "image/jpeg" },
-              { type: "text", text: JSON.stringify(metadata, null, 2) },
+              { type: "image", data: buf.toString("base64"), mimeType: "image/jpeg" },
             ],
           };
-        };
-
-        // Image response via file path (get_photo_for_review)
-        if (response.result && response.result.imagePath) {
-          const winPath: string = response.result.imagePath;
-          // Convert Windows path to WSL path: C:\foo\bar → /mnt/c/foo/bar
-          const wslPath = "/mnt/" + winPath[0].toLowerCase() + winPath.slice(2).replace(/\\/g, "/");
-          console.error(`[image] Reading from WSL path: ${wslPath}`);
-          const imageBuffer = fs.readFileSync(wslPath);
-          const imageData = imageBuffer.toString("base64");
-          return buildImageResponse({ ...response.result, imageData });
         }
 
-        // Legacy: imageData already base64-encoded in response
-        if (response.result && response.result.imageData) {
-          return buildImageResponse(response.result);
+        // ── analyze_raw_photo: embedded JPEG from RAW → full analysis ────
+        if (name === "analyze_raw_photo" && res?.rawPath) {
+          const rawWsl = toWslPath(res.rawPath);
+          console.error(`[analyze_raw] extracting embedded JPEG from ${rawWsl}`);
+          const jpeg = extractEmbeddedJpeg(rawWsl);
+          if (!jpeg) {
+            return { content: [{ type: "text", text: JSON.stringify({ error: "No embedded JPEG found in RAW file" }) }], isError: true };
+          }
+          const analysis = await analyzeImage(jpeg, "embedded_jpeg");
+          return { content: [{ type: "text", text: JSON.stringify(analysis, null, 2) }] };
         }
 
-        // Non-image response (metadata, search, collections, etc.)
+        // ── analyze_edit: exported JPEG → image + full analysis ──────────
+        if (name === "analyze_edit" && res?.imagePath) {
+          const buf = fs.readFileSync(toWslPath(res.imagePath));
+          const analysis = await analyzeImage(buf, "exported_jpeg");
+          return {
+            content: [
+              { type: "image", data: buf.toString("base64"), mimeType: "image/jpeg" },
+              { type: "text", text: JSON.stringify(analysis, null, 2) },
+            ],
+          };
+        }
+
+        // ── all other tools: return JSON text ────────────────────────────
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response.result, null, 2),
-            },
-          ],
+          content: [{ type: "text", text: JSON.stringify(res, null, 2) }],
         };
       }
 

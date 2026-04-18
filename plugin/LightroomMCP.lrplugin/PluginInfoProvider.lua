@@ -78,8 +78,12 @@ local function pollServer()
         result = CollectionsHandler.listCollections(data.params)
     elseif data.action == "get_photo_metadata" then
         result = MetadataHandler.getPhotoMetadata(data.params)
-    elseif data.action == "get_photo_for_review" then
-        result = MetadataHandler.getPhotoForReview(data.params)
+    elseif data.action == "get_photo" then
+        result = MetadataHandler.getPhoto(data.params)
+    elseif data.action == "analyze_raw_photo" then
+        result = MetadataHandler.analyzeRawPhoto(data.params)
+    elseif data.action == "analyze_edit" then
+        result = MetadataHandler.analyzeEdit(data.params)
     elseif data.action == "get_active_photo" then
         result = MetadataHandler.getActivePhoto()
     elseif data.action == "search_photos" then
