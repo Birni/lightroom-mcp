@@ -11,6 +11,7 @@ local CollectionsHandler = require 'HandlerCollections'
 local MetadataHandler = require 'HandlerMetadata'
 local SearchHandler = require 'HandlerSearch'
 local OrganizationHandler = require 'HandlerOrganization'
+local DevelopHandler = require 'HandlerDevelop'
 
 local logger = LrLogger('LightroomMCP')
 logger:enable("logfile")
@@ -92,6 +93,16 @@ local function pollServer()
         result = OrganizationHandler.setKeywords(data.params)
     elseif data.action == "set_rating" then
         result = OrganizationHandler.setRating(data.params)
+    elseif data.action == "set_develop_settings" then
+        result = DevelopHandler.setDevelopSettings(data.params)
+    elseif data.action == "reset_develop_settings" then
+        result = DevelopHandler.resetDevelopSettings(data.params)
+    elseif data.action == "create_snapshot" then
+        result = DevelopHandler.createSnapshot(data.params)
+    elseif data.action == "list_snapshots" then
+        result = DevelopHandler.listSnapshots(data.params)
+    elseif data.action == "apply_snapshot" then
+        result = DevelopHandler.applySnapshot(data.params)
     else
         result = { error = "Action not yet implemented: " .. data.action }
     end
