@@ -1,4 +1,4 @@
-# 📷 Lightroom Edit Workflow v3.0 — Claude-gestützt
+# 📷 Lightroom Edit Workflow v3.5 — Claude-gestützt
 
 > **Zweck:** Session-Choreographie für Claude + Lightroom MCP.
 > Sagt wann welche Funktion aufgerufen wird und wo du (User) eingreifst.
@@ -9,7 +9,7 @@
 ## So benutzt du diesen Workflow
 
 Öffne ein Bild im Develop-Modul, starte Claude mit:
-> *„Bearbeite das aktive Bild nach Workflow v3.0"* (+ ggf. Stilwunsch wie „cool-dramatisch" oder „natürlich-warm")
+> *„Bearbeite das aktive Bild nach Workflow v3.5"* (+ ggf. Stilwunsch wie „cool-dramatisch" oder „natürlich-warm")
 
 Claude geht dann Phase für Phase durch. An jeder **🛑 Feedback-Stelle** wartet er auf dich.
 
@@ -71,7 +71,7 @@ Adobe Sensei (Lightroom Auto) ist auf Millionen Bildern trainiert und liefert ei
 2. `lightroom:set_develop_settings` mit `auto_tone: true` (und optional `auto_white_balance: true` — siehe unten)
 3. `lightroom:get_active_photo` → liest die von Auto gesetzten Basic-Werte aus dem Panel
 4. `lightroom:analyze_edit` → quantitative Auswirkung
-5. `lightroom:create_snapshot` als `LR Auto (Referenz)`
+5. `lightroom:create_snapshot` als `01_Auto-Referenz`
 6. Reset oder direkt Variante A darüber bauen
 
 **Claude gibt aus:** Vergleichstabelle Baseline vs. Auto. Fokus auf Abweichungen:
@@ -113,7 +113,7 @@ Cropping definiert die Komposition, bevor stilistische Edit-Entscheidungen falle
 - Nennt konkret: Seitenverhältnis + Ausrichtungskorrektur (Grad) falls nötig
 
 **Claude gibt aus:**
-- Empfohlenes Seitenverhältnis (3:2 original, 16:9 Panorama, 4:5 Instagram-Portrait, 1:1 quadratisch, 9:16 Reels)
+- Empfohlenes Seitenverhältnis (3:2 original, 16:9 Panorama, 19:9 Ultra-Panorama, 4:5 Instagram-Portrait, 1:1 quadratisch, 9:16 Reels)
 - Ausrichtungsvorschlag falls Horizont schief (Grad, im Uhrzeigersinn oder gegen)
 - Was aus dem Bild weg darf (störende Ränder, unwichtige Bildzonen)
 - Was unbedingt bleiben muss (Motiv-Anker, Symmetrien, führende Linien)
@@ -133,10 +133,22 @@ Nach dem Crop kann Claude `lightroom:analyze_edit` laufen lassen — das respekt
 ## Phase 3 — Drei Edit-Varianten berechnen & als Snapshots speichern
 
 **Claude tut pro Variante:**
-1. `lightroom:reset_develop_settings` (nur vor Variante A — danach wird auf Varianten-Basis weitergearbeitet)
-2. `lightroom:set_develop_settings` mit kompletter Werte-Vorgabe
-3. `lightroom:create_snapshot` mit klarem Namen (`Var A — [Label]`, `Var B — [Label]`, `Var C — [Label]`)
-4. `lightroom:analyze_edit` zur Verifikation der Variante
+1. `lightroom:reset_develop_settings` (nur vor Variante A — danach wird auf Varianten-Basis weitergearbeitet, oder alternativ alle Werte explizit setzen statt zu resetten, um User-gesetzten Crop zu schützen)
+2. **Pre-Set Sektions-Checkliste durchgehen** (siehe unten)
+3. `lightroom:set_develop_settings` mit kompletter Werte-Vorgabe
+4. `lightroom:create_snapshot` mit klarem Namen (`02_VarA_[Label]`, `02_VarB_[Label]`, `02_VarC_[Label]`)
+5. `lightroom:analyze_edit` zur Verifikation der Variante
+
+### 🔴 Pre-Set Sektions-Checkliste (vor jedem `set_develop_settings`)
+
+Diese Checkliste ist **verpflichtend** vor jedem Varianten-Aufruf. Claude muss alle sechs Lightroom-Panels bewusst durchgehen, auch wenn der Wert bewusst auf 0 bleibt. Ohne explizites Durchgehen fehlen systematisch einzelne Sektionen (Lesson aus v3.5-Entstehungssession: drei Sektionen in einer Session vergessen — Details/Maskieren, Color Grading unter Wirkungsschwelle, Tonwertkurve komplett).
+
+- ☐ **Grundeinstellungen** — `exposure`, `contrast`, `highlights`, `shadows`, `whites`, `blacks`, `texture`, `clarity`, `dehaze`, `vibrance`, `saturation`, ggf. `temperature` / `tint` (siehe Anhang A zu Kelvin-Absolut-Semantik)
+- ☐ **Tonwertkurve (parametrisch)** — `tone_shadows`, `tone_darks`, `tone_lights`, `tone_highlights`. Point curves werden nicht benutzt (User-Präferenz). Matte-Lift in den Tiefen (`tone_shadows` +8 bis +12) ist Default für Antarktis-/Dokumentarisch-Stile
+- ☐ **HSL (Hue/Sat/Lum)** — nur die Buckets bearbeiten, die in `hueDistribution` ≥5 % zeigen. Monochrome Szenen: meist nur `blue`/`aqua`. Ghost-Korrekturen in leeren Buckets vermeiden
+- ☐ **Farbmischung / Color Grading** — `cg_shadow_hue`/`_sat`, `cg_highlight_hue`/`_sat`, `cg_balance`. **Sat-Werte: entweder 0 oder ≥10, niemals 1–9** (Wirkungsschwelle — siehe Anhang A). Bei Antarktis-Szenen: warm-amber Shadows (35°) statt Blau, sonst werden Felsen künstlich kühl
+- ☐ **Details** — `sharpness`, `sharpen_radius`, `sharpen_detail`, **`sharpen_masking`** (niemals Default 0 lassen für Landschaft/Stadt — glatte Flächen werden sonst mitgeschärft), `noise_luminance`, `noise_color`. Baselines pro Kamera und Motiv siehe [Anhang C](#anhang-c--kamera-grundlagen)
+- ☐ **Effekte** — `vignette_amount`, `vignette_midpoint`, `vignette_feather`, `vignette_roundness`, ggf. `grain_*`
 
 **Die drei Varianten werden an den Motiv-Typ aus Phase 2 angepasst (siehe [Anhang D](#anhang-d--motiv-profile)).**
 
@@ -144,8 +156,8 @@ Standard-Varianten für **Landschaft** (Default, wenn Motiv-Typ nicht eindeutig)
 
 | Variante | Charakter | Typischer Zweck |
 |---|---|---|
-| **A — Dokumentarisch** | moderate Kontraste, natürliche Farben, Felsen offen, Matte-Lift in Tiefen | Publikation, Reportage, Archiv |
-| **B — Cool-Dramatic** | tiefe Schwarzpunkte, hohe Weißpunkte, Blau/Aqua HSL-Push, Vignette | Instagram, Stil Matthias |
+| **A — Dokumentarisch** | moderate Kontraste, natürliche Farben, Felsen offen, Matte-Lift in Tiefen, **CG bewusst aus** | Publikation, Reportage, Archiv |
+| **B — Cool-Dramatic** | tiefe Schwarzpunkte, hohe Weißpunkte, Blau/Aqua HSL-Push, Vignette, warm-amber CG Shadows (gegen Felsen-Verblauen) | Instagram, Stil Matthias |
 | **C — Teal/Orange Cinematic** | Variante A/B + Color Grading Shadows 35°/Lights 210° (sat ≥10) | Filmischer Look, Farbtrennung |
 
 Für Wildlife/Stadt siehe Motiv-Profile.
@@ -169,7 +181,7 @@ Diese Phase wiederholt sich so lange, bis der globale Edit sitzt.
 
 **Claude tut pro Iteration:**
 1. `lightroom:create_snapshot` vor Änderung (Sicherheitsnetz)
-2. `lightroom:set_develop_settings` mit Delta
+2. `lightroom:set_develop_settings` mit Delta — **auch hier Sektions-Checkliste prüfen, falls neue Sektion betroffen**
 3. `lightroom:analyze_edit`
 4. Vergleichstabelle vorher/nachher
 
@@ -177,6 +189,7 @@ Diese Phase wiederholt sich so lange, bis der globale Edit sitzt.
 - Kontrast, Belichtung, Farbbalance
 - HSL Gelb/Orange defensiv gegen Gelbstich im Nebel
 - Color Grading Sättigung hoch (Werte ≥10 damit sichtbar, siehe [Anhang A](#anhang-a--tool-quirks))
+- Parametrische Kurve nachziehen (Matte-Lift in Tiefen falls Felsen zuloßen)
 
 ### 🛑 Feedback-Stelle 2
 
@@ -207,6 +220,24 @@ Standard-Masken für **Landschaft** mit Vorschlag aus den Zahlen:
 
 **Halbe Intensität als Default für Matthias' Stil** — Werte sind bereits reduziert angesetzt.
 
+### 🟡 Masken-Reihenfolge & Interaktions-Warnung
+
+Die Reihenfolge, in der Masken gesetzt werden, beeinflusst das Ergebnis sichtbar. AI-Masken können in angrenzende Bereiche „einbluten", was nachgelagerte Masken unterwandert.
+
+**Empfohlene Reihenfolge für Landschaft:**
+
+1. **🌫️ Himmel-Maske zuerst** — größte Fläche, stärkster Hebel. Gibt Basis für die Einschätzung, was danach noch nötig ist.
+2. **🪨 Felsen/Motiv (invertierter Himmel oder „Motiv auswählen")** — nachdem Himmel gesetzt ist, sieht man welche Bereiche noch offen sind
+3. **🧊 Schnee-/Eis-Bereichsmaske danach** — hier passiert häufig ein Interaktions-Effekt:
+   - Die AI-Maske „Himmel auswählen" greift oft in **angrenzende helle Bereiche** (z.B. schneebedeckte Gipfel hinter dem Himmel, helle Wolkenkanten).
+   - Nach der Himmel-Maske ist die Schnee-Bereichsmaske möglicherweise **weniger stark** als erwartet, weil der Helligkeitsbereich bereits reduziert wurde.
+   - **Gegenmaßnahme:** Werte der Schnee-Bereichsmaske 20–30 % stärker ansetzen als ursprünglich geplant, wenn Himmel-Maske Belichtung ≤ −0.2 hatte. Oder: Schnee vor Himmel setzen (ungewöhnlich, aber funktional)
+4. **💧 Vordergrund/Wasser zuletzt** — am wenigsten Interaktionseffekte
+
+**Reality-Check nach Himmel-Maske (empfohlen):** `analyze_edit` laufen lassen, `bright.meanLum` und `thirds[0]` checken. Wenn `bright.meanLum` um > 20 gefallen ist, sind auch die Schneeberge mit heruntergezogen worden — dann Schnee-Maske verstärken.
+
+**Lesson aus v3.5-Entstehungssession:** Himmel-Maske senkte `thirds[0]` um −36, aber auch `bright.meanLum` um −25 (Schneeberge betroffen). Die geplante Schnee-Bereichsmaske (+0.10 Belichtung) konnte nicht kompensieren — sichtbares whites%-Einbrechen von 5.6 auf 0.2. Lösung im Einzelfall: globalen Weißpunkt nachträglich minimal anheben (wirkt primär auf Schneeberge, weil Himmel durch Maske gedeckelt).
+
 ### 🛑 Feedback-Stelle 3
 
 > User setzt Masken in Lightroom, gibt Rückmeldung: *„Masken sind drauf"* oder *„Masken X und Y gesetzt, Rest nicht"*
@@ -225,6 +256,7 @@ Standard-Masken für **Landschaft** mit Vorschlag aus den Zahlen:
 - `highlightsWarnPct` > 5 % → Eis überstrahlt
 - `gMinusM` Drift > 3 → Farbstich aufgetaucht
 - `saturation p95` > 90 → irgendwo zu bunt
+- `whites %` nach Masken < 1 UND vor Masken > 3 → Weißpunkt durch Himmel-Maske verloren (siehe Phase 5 Interaktions-Warnung). Globalen `whites`-Regler um +5 bis +10 nachziehen.
 
 **Claude gibt aus:** Verifikations-Tabelle + evtl. Korrekturvorschlag
 
@@ -270,7 +302,7 @@ Wenn sinnvoll, schlägt Claude vor:
 ## Phase 8 — Abschluss
 
 **Claude tut:**
-1. Finaler Snapshot mit Stern-Präfix: `lightroom:create_snapshot` als `★ FINAL — [Variante] + Masken`
+1. Finaler Snapshot mit Stern-Präfix: `lightroom:create_snapshot` als `★_FINAL_[Variante]+Masken`
 2. Zusammenfassung (1 Absatz):
    - Welche Variante war Basis
    - Welche Masken gesetzt
@@ -291,6 +323,7 @@ Wenn sinnvoll, schlägt Claude vor:
 - Mehr als 3 Iterationen an demselben Regler nötig
 - Ein User-Eingriff hat eine offensichtliche Workflow-Lücke geschlossen (wie Phase 2b entstand)
 - Ein neues Motiv/Genre aufgetaucht, das kein vorhandenes Profil sauber abdeckt
+- User fragt mehrfach „Warum fehlt X?" auf Sektionen, die standardmäßig im Workflow sein sollten → mehrere Symptome desselben Root-Causes, sofort reagieren
 
 **Claude tut:**
 1. Session-Verlauf durchgehen und strukturiert reflektieren (siehe Template unten)
@@ -336,6 +369,8 @@ Konkrete Ergänzungsvorschläge mit Begründung und Lokation (welche Phase, welc
 
 Nicht jede Session rechtfertigt eine Version. Wenn die Retrospektive nur kleine Beobachtungen findet (🟢), sammeln bis drei bis fünf ähnliche Einträge zusammen ein Update lohnen. Parameter-Bugs (🔴) gehen sofort rein.
 
+**Ausnahme — Root-Cause-Cluster:** Wenn mehrere 🔴-Einträge denselben Root-Cause haben (z.B. drei vergessene Develop-Sektionen alle auf fehlende Checkliste zurückführbar), gehen sie als **eine kohärente Änderung** zusammen rein, auch wenn es drei Symptome sind. Nicht auf weitere Sessions warten — gleiche Ursache würde beim nächsten Bild wieder zuschlagen.
+
 ---
 
 ## Anhang A — Tool-Quirks
@@ -367,6 +402,18 @@ Nach schweren Mask-Renderings kann `create_snapshot` 50 s timeouten. Dann User b
 
 ---
 
+### 🔴 Sanity-Check-Liste (vor jedem `set_develop_settings`)
+
+Ergänzung zur Pre-Set Sektions-Checkliste in Phase 3. Diese Regeln betreffen Parameter-Werte, nicht Sektions-Vollständigkeit:
+
+- **`cg_*_sat`** (Color Grading Sättigung Shadow/Highlight): entweder **0** oder **≥10** — niemals 1–9. Zwischenwerte sind in der gerenderten Ausgabe faktisch nicht messbar. Wer „dezentes Color Grading" will, lässt es aus (0) — denn technisch gibt es kein dezentes CG unter 10.
+- **`sharpen_masking`**: niemals bei Default 0 lassen für Landschaft/Stadt. Glatte Flächen (Himmel, Meer, Wände) werden sonst mitgeschärft und zeigen Rauschen-Amplifikation. Baselines siehe Anhang C.
+- **`tone_*` (parametrische Kurve)**: wenn User-Memory „Always use parametric curve" enthält, gehört mindestens **ein** `tone_*`-Wert zu jeder ernsthaften Variante, auch wenn nur leicht. Null-Kurve ist ok bei reiner Farbstil-Exploration, aber nicht als Default.
+- **`temperature`**: 0 oder Werte < 2000 K niemals setzen (Blau-Crash). Wenn unverändert: Parameter weglassen, nicht auf 0 setzen.
+- **HSL-Sparsamkeit**: in monochromen Szenen (hueDistribution ≥95 % ein Bucket) nur den dominanten Bucket anfassen. Ghost-Korrekturen in leeren Buckets produzieren unvorhersehbare Ergebnisse, wenn das Bild später leicht nachbelichtet wird.
+
+---
+
 ### Diagnose-Regel bei unerwartetem Tool-Verhalten
 
 Wenn ein Parameter sich seltsam verhält — niemals sofort „kaputt" diagnostizieren. Stattdessen systematischer Kalibrierungstest:
@@ -385,11 +432,12 @@ Nummerische Präfixe vermeiden Chaos in langen Sessions. Empfohlenes Schema:
 | Phase 0 / 1 | `00_Baseline (As Shot)` | `00_Baseline (As Shot)` |
 | Phase 2b | `01_Auto-Referenz` | `01_Auto-Referenz` |
 | Phase 3 | `02_VarA_[Label]`, `02_VarB_[Label]`, `02_VarC_[Label]` | `02_VarB_Cool-Dramatic` |
+| Phase 3 bei Korrektur-Iteration | `02_VarX_[Label]_v2`, `_v3` | `02_VarA_Dokumentarisch_v3` |
 | Phase 4 (Iterationen) | `03_Iter1_[Änderung]`, `03_Iter2_…` | `03_Iter1_Gelb-Fix` |
 | Phase 5 vorher | `04_Pre-Masken` | `04_Pre-Masken` |
-| Phase 8 (Final) | `★_FINAL_[Variante]` | `★_FINAL_Dramatic+CG+Masken` |
+| Phase 8 (Final) | `★_FINAL_[Variante]+Masken` | `★_FINAL_Dokumentarisch+Masken` |
 
-**Aufräumen am Session-Ende:** Iter- und Pre-Snapshots können gelöscht werden, sobald der Final-Snapshot steht. Baseline, Auto-Referenz und Final-Snapshot immer behalten.
+**Aufräumen am Session-Ende:** Iter-, Pre- und `_vN`-Zwischenversionen können gelöscht werden, sobald der Final-Snapshot steht. Baseline, Auto-Referenz und Final-Snapshot immer behalten.
 
 ---
 
@@ -443,7 +491,6 @@ Nummerische Präfixe vermeiden Chaos in langen Sessions. Empfohlenes Schema:
 - Profil: **Adobe Farbe**
 - Objektivkorrektur: automatisch bei RF-Glas (R6 erkennt RF24-105, RF 70-200 etc. sofort)
 - Tonwert-Wiederherstellung: ±3 Stops problemlos
-- Schärfe-Radius: 0.8–1.0 (feine Details)
 - Rauschen bis ISO 3200 vernachlässigbar → Luminanz-NR 0–10
 
 ### Samsung Galaxy S21 Ultra (JPEG/HEIC)
@@ -459,6 +506,27 @@ Nummerische Präfixe vermeiden Chaos in langen Sessions. Empfohlenes Schema:
 - Flacher Ausgangston → Kontrast/Struktur aggressiver als bei R6
 - Rauschen in Schatten häufig → Luminanz-NR 15–25
 - Mikrokontrast flach → Klarheit/Struktur je +15 bis +20
+
+### 🔴 Schärfungs-Baselines (alle vier Regler)
+
+Standard-Werte pro Kamera und Motiv-Typ. Bei abweichendem ISO oder besonderem Motiv (z.B. Portrait, Makro) einzeln anpassen.
+
+| Kamera | Motiv | Betrag | Radius | Details | **Maskieren** | Luminanz-NR |
+|---|---|---|---|---|---|---|
+| R6 CR3 | Landschaft | 40 | 0.9 | 25 | **40** | 0–10 |
+| R6 CR3 | Wildlife | 50 | 1.2 | 30–35 | **15–25** | 15–40 (je ISO) |
+| R6 CR3 | Stadt / Architektur | 45 | 1.0 | 25–30 | **25–35** | 0–15 |
+| R6 CR3 | Portrait | 35 | 1.4 | 20 | **50–60** | 10–20 |
+| S21 JPEG | alle | 20 | 0.8 | 15 | **50** | Prüfen, meist 0 |
+| S21 JPEG | Nacht/Low-Light | 15 | 0.8 | 15 | **60** | 20–30 |
+| Insta360 JPEG | Action | 35 | 1.0 | 25 | **35** | 15–25 |
+
+**Faustregel Maskieren:**
+- **Hoch (40+):** glatte Flächen sollen glatt bleiben (Himmel, Haut, Bokeh, Wände, Meer)
+- **Mittel (25–35):** gemischte Szenen mit Kanten und Flächen (Stadt, Architektur)
+- **Niedrig (15–25):** Fell, Federn, Haar, kleinteilige organische Strukturen, die von Schärfe profitieren
+
+**Prüfung per Alt-/Opt-Klick auf Maskieren-Regler in LR:** zeigt Schwarz-Weiß-Vorschau, wo geschärft wird. Weiß = wird geschärft, Schwarz = bleibt unangetastet. Für Landschaft sollten Himmel und Meer im Idealfall größtenteils schwarz sein.
 
 ---
 
@@ -477,14 +545,18 @@ Innerhalb der Travel-Fotografie (Reise, Natur, Tiere, Städte, Meer, Berge, Eis)
 - Weitwinkel bis Normalbrennweite (14–70 mm)
 
 **Phase 3 — Varianten:**
-- **A — Dokumentarisch** (offene Tiefen, Matte-Lift, natürliche Farben)
-- **B — Cool-Dramatic** oder **Warm-Dramatic** je nach Lichtstimmung (aggressive Schwarz-/Weißpunkte, HSL-Push der dominanten Farbe)
-- **C — Teal/Orange Cinematic** (Color Grading-Split, 210° Lichter / 35° Schatten, sat ≥10)
+- **A — Dokumentarisch** (offene Tiefen, Matte-Lift, natürliche Farben, **CG bewusst aus**)
+- **B — Cool-Dramatic** oder **Warm-Dramatic** je nach Lichtstimmung (aggressive Schwarz-/Weißpunkte, HSL-Push der dominanten Farbe, warm-amber CG Shadows mit sat ≥10)
+- **C — Teal/Orange Cinematic** (Color Grading-Split, 210° Lichter / 35° Schatten, sat ≥15)
+
+**Phase 3 — Schärfungs-Baselines:** Betrag 40, Radius 0.9, Details 25, **Maskieren 40**
+
+**Phase 3 — Kurve (Default):** `tone_shadows` +8 bis +12 (Matte-Lift), `tone_lights` −2 bis −5 (Himmel-Verdichtung), `tone_highlights` +3 bis +8 (Schnee/Eis-Lift)
 
 **Phase 5 — Masken:**
 1. 🌫️ Himmel auswählen — Belichtung −0.2 bis −0.3, Lichter −15, Dehaze +10-15
 2. 🪨 Motiv (Berg/Fels) auswählen oder Himmel invertieren — Tiefen +10-20, Struktur +10-15
-3. 🧊 Helligkeits-Bereichsmaske für Glanzlichter (Schnee/Eis/Wellenschaum) — Belichtung +0.15, Tönung +3 (gegen Cyan)
+3. 🧊 Helligkeits-Bereichsmaske für Glanzlichter (Schnee/Eis/Wellenschaum) — Belichtung +0.15, Tönung +3 (gegen Cyan). **Bei starker Himmel-Maske 20–30 % verstärken** (siehe Phase 5 Interaktions-Warnung)
 4. 💧 Vordergrund/Wasser unteres Drittel — Klarheit +5, Dehaze +5
 
 **Spezialregeln:**
@@ -494,6 +566,7 @@ Innerhalb der Travel-Fotografie (Reise, Natur, Tiere, Städte, Meer, Berge, Eis)
 **Crop-Empfehlung:**
 - **3:2** Original (Standard, wenn Komposition hoch/breit ausgewogen)
 - **16:9** Panorama-Crop bei dominanter Horizontale (Meer, Bergkette, Wüste)
+- **19:9** Ultra-Panorama bei sehr breiten Landschaften mit strukturarmem Himmel
 - **4:5** für Instagram-Feed, wenn vertikale Motive (Wasserfälle, Berge hochkant)
 - **1:1** selten — nur bei symmetrischen Motiven (Spiegelung im See)
 - Horizont-Check zwingend: Wasserlinie, Meeresoberfläche, Fernhorizont müssen exakt waagerecht
@@ -512,9 +585,13 @@ Innerhalb der Travel-Fotografie (Reise, Natur, Tiere, Städte, Meer, Berge, Eis)
 - Mittlere bis lange Brennweite (70–400 mm+)
 
 **Phase 3 — Varianten:**
-- **A — Natural** (neutrale Farben, moderate Kontraste, Tier-Farbe authentisch)
+- **A — Natural** (neutrale Farben, moderate Kontraste, Tier-Farbe authentisch, CG meist aus)
 - **B — Low-Key Drama** (Hintergrund abgedunkelt, Motiv hell, starker Subjekt-Fokus)
 - **C — High-Key Clean** (helle Töne, Hintergrund nahezu weiß, Motiv-Details fein)
+
+**Phase 3 — Schärfungs-Baselines:** Betrag 50, Radius 1.2, Details 30–35, **Maskieren 15–25** (niedrig, damit Fell/Federn profitieren), Luminanz-NR je ISO 15–40
+
+**Phase 3 — Kurve (Default):** `tone_shadows` +5 (moderate Tiefen-Öffnung), `tone_lights` 0 bis +3, `tone_highlights` +3 (Licht-Akzente)
 
 **Phase 5 — Masken:**
 1. 🐾 **„Motiv auswählen"** (AI-Maske) — Belichtung +0.1 bis +0.2, Struktur +10-15, Klarheit +5, Schärfe-Boost
@@ -523,8 +600,6 @@ Innerhalb der Travel-Fotografie (Reise, Natur, Tiere, Städte, Meer, Berge, Eis)
 
 **Spezialregeln:**
 - **HSL Orange/Yellow NIE ohne Präzision anfassen** — Fell/Federn/Haut liegen in diesen Buckets
-- Schärfe-Radius 1.0–1.4 (größer als Landschaft, für Fell-Struktur)
-- `noise_luminance` je nach ISO 15–40 wichtig
 - Vignette dezenter als Landschaft (−5 bis −8), sonst wirkt Motiv unnatürlich isoliert
 - Dehaze sparsam — kann Bokeh zerstören
 
@@ -552,7 +627,11 @@ Innerhalb der Travel-Fotografie (Reise, Natur, Tiere, Städte, Meer, Berge, Eis)
 **Phase 3 — Varianten:**
 - **A — Natural** (neutraler Weißabgleich, ausgeglichen)
 - **B — Film-Noir** (Low-Key, hohe Kontraste, Farbsättigung moderat, Schatten verdichtet)
-- **C — Neon-Cinematic** (Teal/Magenta-Grading, starke Farbblocks, moderne City-Ästhetik)
+- **C — Neon-Cinematic** (Teal/Magenta-Grading, starke Farbblocks, moderne City-Ästhetik, CG sat ≥15)
+
+**Phase 3 — Schärfungs-Baselines:** Betrag 45, Radius 1.0, Details 25–30, **Maskieren 25–35** (mittel, Balance zwischen Kantenschärfe und glatten Wänden), Luminanz-NR 0–15 (Nacht: 20–40)
+
+**Phase 3 — Kurve (Default):** `tone_shadows` +3 bis +8, `tone_lights` −5 (Verdichtung), `tone_highlights` −3 bis −8 (Lichter-Kontrolle bei Nachtszenen mit hellen Quellen)
 
 **Phase 5 — Masken:**
 1. 🏢 Himmel oder Hintergrund (falls vorhanden) — Belichtung −0.2, Dehaze +15 (Blaue Stunde)
@@ -566,7 +645,6 @@ Innerhalb der Travel-Fotografie (Reise, Natur, Tiere, Städte, Meer, Berge, Eis)
 - Clarity und Dehaze aggressiver erlaubt (+15 bis +25) — Strukturen profitieren
 - Color Grading kann gegensätzliche Hues setzen (z.B. Shadows 220° / Highlights 30°) — Stadt verträgt Split-Looks
 - HSL **alle** aktiven Buckets bearbeiten — keine monochromatic-Annahme
-- Rauschreduzierung bei Nacht-Shots höher (`noise_luminance` 20–40)
 
 **Crop-Empfehlung:**
 - **Upright-Transformation VOR Crop** — kippende Gebäude gerade ziehen, danach croppen (sonst fehlt Material)
@@ -589,6 +667,7 @@ Manche Travel-Bilder sind Mischformen — z.B. ein Tier in einer Landschaft, ode
 
 ## Changelog
 
+- **v3.5** — Drei 🔴-Eigenfehler aus einer Session (Bark Europa, Antarktis-Küstenlandschaft 4F4A3249) zu einer kohärenten Änderung zusammengefasst, weil alle denselben Root-Cause haben — fehlende Sektions-Schablone in Phase 3. Ergänzungen: (1) Phase 3 **Pre-Set Sektions-Checkliste** über alle 6 LR-Panels (Grundeinstellungen / Kurve / HSL / Color Grading / Details / Effekte), auch wenn bewusst 0; (2) Anhang A **Sanity-Check-Liste** mit konkreten Parameter-Regeln (cg_*_sat 0 oder ≥10, sharpen_masking nie bei 0 für Landschaft/Stadt, tone_* als Pflicht bei Memory-Präferenz); (3) Anhang C **Schärfungs-Baselines** als Tabelle pro Kamera und Motiv-Typ inkl. Maskieren-Wert; (4) Anhang D pro Motiv-Profil jetzt Schärfungs-Baselines und Kurven-Defaults redundant aufgeführt für schnelleren Lookup in Phase 3; (5) Phase 5 **Masken-Reihenfolge und Interaktions-Warnung** (Himmel-AI-Maske blutet in Schneeberge → Schnee-Bereichsmaske verstärken oder Reality-Check einbauen); (6) Phase 6 Checkliste um `whites%`-Einbruch nach Himmel-Maske ergänzt; (7) Snapshot-Schema um `_vN`-Suffix erweitert für Korrektur-Iterationen; (8) Phase 9 Akkumulationsregel um Root-Cause-Cluster-Ausnahme erweitert (mehrere 🔴 mit gleicher Ursache = eine Änderung, sofort).
 - **v3.4** — Phase 9 (Workflow-Retrospektive) hinzugefügt: strukturierte Reflexion nach Session mit Template, Trigger-Bedingungen und Akkumulationsregel. Anhang A erweitert um Diagnose-Regel bei unerwartetem Tool-Verhalten (temperature-Lektion), Snapshot-Namenskonvention (Nummernpräfixe statt willkürliche Sternchen). Selbstreferenziell: Diese Version ist das erste Retrospektive-Ergebnis, angewandt auf die eigene Entstehungssession.
 - **v3.3** — Phase 2c (Zuschnitt & Ausrichtung) eingefügt zwischen Auto-Check und Varianten-Berechnung.
 - **v3.2** — Anhang D (Motiv-Profile) hinzugefügt: Landschaft, Wildlife, Stadt.
