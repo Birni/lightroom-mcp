@@ -248,43 +248,6 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
         },
       },
       {
-        name: "create_collection",
-        description: "Create a new collection",
-        inputSchema: {
-          type: "object",
-          properties: {
-            name: {
-              type: "string",
-              description: "Collection name",
-            },
-            parent: {
-              type: "string",
-              description: "Parent collection set (optional)",
-            },
-          },
-          required: ["name"],
-        },
-      },
-      {
-        name: "add_to_collection",
-        description: "Add photos to a collection",
-        inputSchema: {
-          type: "object",
-          properties: {
-            collection_name: {
-              type: "string",
-              description: "Collection name",
-            },
-            photo_ids: {
-              type: "array",
-              items: { type: "string" },
-              description: "Array of full file paths (e.g. E:/pictures/photo.CR3)",
-            },
-          },
-          required: ["collection_name", "photo_ids"],
-        },
-      },
-      {
         name: "set_keywords",
         description: "Add or remove keywords from photos",
         inputSchema: {
@@ -414,66 +377,6 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
             photo_id: { type: "string", description: "Full file path (e.g. E:/pictures/photo.CR3). Omit for active photo." },
           },
           required: ["snapshot_id"],
-        },
-      },
-      {
-        name: "import_photos",
-        description: "Import photos into Lightroom catalog",
-        inputSchema: {
-          type: "object",
-          properties: {
-            source_path: {
-              type: "string",
-              description: "Path to photo or folder to import",
-            },
-            collection_name: {
-              type: "string",
-              description: "Collection to add imported photos to (optional)",
-            },
-            copy_to: {
-              type: "string",
-              description: "Destination folder for copying files (optional)",
-            },
-          },
-          required: ["source_path"],
-        },
-      },
-      {
-        name: "export_photos",
-        description: "Export photos from Lightroom",
-        inputSchema: {
-          type: "object",
-          properties: {
-            photo_ids: {
-              type: "array",
-              items: { type: "string" },
-              description: "Array of full file paths (e.g. E:/pictures/photo.CR3) to export",
-            },
-            destination: {
-              type: "string",
-              description: "Export destination folder",
-            },
-            format: {
-              type: "string",
-              description: "Export format (jpeg, png, tiff, original)",
-              enum: ["jpeg", "png", "tiff", "original"],
-            },
-            quality: {
-              type: "number",
-              description: "JPEG quality (0-100)",
-              minimum: 0,
-              maximum: 100,
-            },
-            width: {
-              type: "number",
-              description: "Max width in pixels (optional)",
-            },
-            height: {
-              type: "number",
-              description: "Max height in pixels (optional)",
-            },
-          },
-          required: ["photo_ids", "destination"],
         },
       },
     ],
