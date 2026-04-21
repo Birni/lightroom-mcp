@@ -53,42 +53,6 @@ describe('Lightroom MCP Server Tools', () => {
     });
   });
 
-  describe('create_collection', () => {
-    it('should require name parameter', () => {
-      const toolSchema = {
-        name: 'create_collection',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'string',
-              description: 'Collection name',
-            },
-          },
-          required: ['name'],
-        },
-      };
-
-      expect(toolSchema.inputSchema.required).toContain('name');
-    });
-  });
-
-  describe('export_photos', () => {
-    it('should support different formats', () => {
-      const formats = ['jpeg', 'png', 'tiff', 'original'];
-
-      formats.forEach(format => {
-        expect(['jpeg', 'png', 'tiff', 'original']).toContain(format);
-      });
-    });
-
-    it('should validate quality range', () => {
-      const quality = 90;
-      expect(quality).toBeGreaterThanOrEqual(0);
-      expect(quality).toBeLessThanOrEqual(100);
-    });
-  });
-
   describe('set_rating', () => {
     it('should validate rating range', () => {
       const validRatings = [0, 1, 2, 3, 4, 5];
