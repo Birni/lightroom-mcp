@@ -32,8 +32,11 @@ HTTP polling architecture — the MCP server runs an HTTP server on port 8765, a
 ## Prerequisites
 
 - **Lightroom Classic** (tested with v13+)
-- **Node.js** 22+ (managed via mise)
+- **WSL2** (Windows Subsystem for Linux) — the MCP server currently runs in WSL
+- **Node.js** 22+ in WSL (managed via mise)
 - **mise** — development tool version manager
+
+> **Note:** Native Windows support (running the server directly without WSL) is planned but not yet implemented. Currently, file path conversion from Windows (`E:\photo.CR3`) to WSL (`/mnt/e/photo.CR3`) is hardcoded in the server.
 
 ## Installation
 
@@ -62,14 +65,14 @@ cd server && npm run build
 
 ### 4. Configure Claude Desktop
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+Edit `%APPDATA%\Claude\claude_desktop_config.json` on Windows. Since the server runs in WSL, use `wsl.exe` as the command:
 
 ```json
 {
   "mcpServers": {
     "lightroom": {
-      "command": "node",
-      "args": ["/path/to/lightroom-mcp/server/dist/index.js"]
+      "command": "wsl.exe",
+      "args": ["node", "/home/YOUR_WSL_USER/lightroom-mcp/server/dist/index.js"]
     }
   }
 }
