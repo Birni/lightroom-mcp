@@ -1,4 +1,4 @@
-# 📷 Lightroom Edit Workflow v3.5 — Claude-gestützt
+# 📷 Lightroom Edit Workflow v3.9 — Claude-gestützt
 
 > **Zweck:** Session-Choreographie für Claude + Lightroom MCP.
 > Sagt wann welche Funktion aufgerufen wird und wo du (User) eingreifst.
@@ -9,7 +9,7 @@
 ## So benutzt du diesen Workflow
 
 Öffne ein Bild im Develop-Modul, starte Claude mit:
-> *„Bearbeite das aktive Bild nach Workflow v3.5"* (+ ggf. Stilwunsch wie „cool-dramatisch" oder „natürlich-warm")
+> *„Bearbeite das aktive Bild nach Workflow v3.9"* (+ ggf. Stilwunsch wie „cool-dramatisch" oder „natürlich-warm")
 
 Claude geht dann Phase für Phase durch. An jeder **🛑 Feedback-Stelle** wartet er auf dich.
 
@@ -73,6 +73,12 @@ Adobe Sensei (Lightroom Auto) ist auf Millionen Bildern trainiert und liefert ei
 4. `lightroom:analyze_edit` → quantitative Auswirkung
 5. `lightroom:create_snapshot` als `01_Auto-Referenz`
 6. Reset oder direkt Variante A darüber bauen
+
+### ⚠️ WB-Reset nach Phase 2b (Pflicht)
+
+`auto_white_balance: true` setzt den Weißabgleich auf „Auto" — dieser State bleibt **persistent** und wird von nachfolgenden `set_develop_settings`-Aufrufen NICHT zurückgesetzt, solange `temperature` nicht explizit gesetzt wird. **Ohne explizites `temperature` in Phase 3 erben alle Varianten den Auto-WB** — das führt bei Antarktis-Szenen zu Gelbstich (Auto interpretiert die kühle Stimmung als WB-Fehler und neutralisiert sie).
+
+**Pflicht-Regel:** In Phase 3 muss **jede Variante** `temperature` explizit setzen (typisch 5500–5800 K für Canon R6 bei Tageslicht). Niemals temperature weglassen und darauf vertrauen, dass As-Shot noch aktiv ist — nach `auto_white_balance: true` ist es das nicht mehr.
 
 **Claude gibt aus:** Vergleichstabelle Baseline vs. Auto. Fokus auf Abweichungen:
 - Welche Regler hat Auto stark gesetzt? (Ausweis: welche Probleme das Modell sieht)
@@ -143,10 +149,18 @@ Nach dem Crop kann Claude `lightroom:analyze_edit` laufen lassen — das respekt
 
 Diese Checkliste ist **verpflichtend** vor jedem Varianten-Aufruf. Claude muss alle sechs Lightroom-Panels bewusst durchgehen, auch wenn der Wert bewusst auf 0 bleibt. Ohne explizites Durchgehen fehlen systematisch einzelne Sektionen (Lesson aus v3.5-Entstehungssession: drei Sektionen in einer Session vergessen — Details/Maskieren, Color Grading unter Wirkungsschwelle, Tonwertkurve komplett).
 
-- ☐ **Grundeinstellungen** — `exposure`, `contrast`, `highlights`, `shadows`, `whites`, `blacks`, `texture`, `clarity`, `dehaze`, `vibrance`, `saturation`, ggf. `temperature` / `tint` (siehe Anhang A zu Kelvin-Absolut-Semantik)
+- ☐ **Grundeinstellungen** — `exposure`, `contrast`, `highlights`, `shadows`, `whites`, `blacks`, `texture`, `clarity`, `dehaze`, `vibrance`, `saturation`, ggf. `temperature` / `tint` (siehe Anhang A zu Kelvin-Absolut-Semantik). **Nach Phase 2b mit `auto_white_balance`: `temperature` MUSS explizit gesetzt werden** (siehe Phase 2b WB-Reset-Warnung).
 - ☐ **Tonwertkurve (parametrisch)** — `tone_shadows`, `tone_darks`, `tone_lights`, `tone_highlights`. Point curves werden nicht benutzt (User-Präferenz). Matte-Lift in den Tiefen (`tone_shadows` +8 bis +12) ist Default für Antarktis-/Dokumentarisch-Stile
 - ☐ **HSL (Hue/Sat/Lum)** — nur die Buckets bearbeiten, die in `hueDistribution` ≥5 % zeigen. Monochrome Szenen: meist nur `blue`/`aqua`. Ghost-Korrekturen in leeren Buckets vermeiden
-- ☐ **Farbmischung / Color Grading** — `cg_shadow_hue`/`_sat`, `cg_highlight_hue`/`_sat`, `cg_balance`. **Sat-Werte: entweder 0 oder ≥10, niemals 1–9** (Wirkungsschwelle — siehe Anhang A). Bei Antarktis-Szenen: warm-amber Shadows (35°) statt Blau, sonst werden Felsen künstlich kühl
+- ☐ **Farbmischung / Color Grading** — Vier Kanäle verfügbar: `cg_shadow`, `cg_midtone`, `cg_highlight`, `cg_global` (jeweils `_hue`, `_sat`, `_lum`), dazu `cg_balance` und `cg_blending`.
+  - **Hue ohne Sat ist toter Code.** Wenn `_hue` gesetzt wird, MUSS `_sat` ≥10 sein. Wenn kein CG gewünscht: weder Hue noch Sat setzen — nicht Hue setzen und Sat auf 0.
+  - **Sat-Werte: entweder 0 oder ≥10, niemals 1–9** (Wirkungsschwelle — unter 10 ist in der gerenderten Ausgabe nicht messbar).
+  - **Luminanz** ist optional — Default 0 = neutral. Negative Werte verdunkeln den Tonbereich, positive hellen auf. Nutzen: Tiefen-Verdichtung (`cg_shadow_lum` −5 bis −15) oder Lichter-Lift (`cg_highlight_lum` +5) ohne Belichtungsänderung.
+  - **Blending** steuert den Übergang zwischen Shadow/Highlight-Zonen (0–100, Default 50). Niedrigere Werte = härtere Trennung, höhere = weicherer Übergang.
+  - **CG-Richtung individuell aus der Analyse ableiten** CG-Richtung aus der Analyse: Claude leitet Shadow- und Highlight-Hue individuell aus dark.bMinusR, bright.bMinusR und tempSpread ab. Grundprinzip: Gegenpol setzen wo Separation fehlt, zurückhalten wo sie schon existiert. Bei tempSpread > 50 ist die natürliche Separation stark genug — CG sparsam (sat 10) oder ganz aus. Claude dokumentiert die Herleitung kurz vor jedem set_develop_settings, z.B.: „Schatten neutral (bMinusR +2), Lichter kühl (+22), tempSpread 11 → warm-amber shadows 35°/10 für Separation, highlights 210°/10 verstärkt vorhandene Kühle."
+  - **Midtone-CG:** Optional, nur einsetzen wenn ein spezifischer Bildbereich in den Mitteltönen dominiert (z.B. Wasserfläche, Nebel). Nicht standardmäßig setzen.
+  - **Global-CG:** Nur für gezielte Gesamt-Farbverschiebungen (selten nötig). Im Normalfall nicht setzen.
+  - Bei Antarktis-Szenen: warm-amber Shadows (35°) statt Blau, sonst werden Felsen künstlich kühl
 - ☐ **Details** — `sharpness`, `sharpen_radius`, `sharpen_detail`, **`sharpen_masking`** (niemals Default 0 lassen für Landschaft/Stadt — glatte Flächen werden sonst mitgeschärft), `noise_luminance`, `noise_color`. Baselines pro Kamera und Motiv siehe [Anhang C](#anhang-c--kamera-grundlagen)
 - ☐ **Effekte** — `vignette_amount`, `vignette_midpoint`, `vignette_feather`, `vignette_roundness`, ggf. `grain_*`
 
@@ -167,7 +181,7 @@ Standard-Varianten für **Landschaft** (Default, wenn Motiv-Typ nicht eindeutig)
 | `dark.bMinusR` < −20 (Schatten schon warm) | kühl (210–220°) | warm (35–45°) | Gegenpol setzen, Separation verstärken |
 | `dark.bMinusR` > +10 (Schatten schon kühl) | warm (30–45°) | kühl (200–220°) | Gegenpol setzen, Felsen/Struktur nicht weiter verkühlen |
 | `tempSpread` < 20 (kaum Farbtrennung) | warm (35°) | kühl (210°) | Split erzeugen wo keiner ist |
-| `tempSpread` > 50 (starke Trennung) | CG sparsam oder aus | CG sparsam oder aus | Vorhandene Separation reicht, CG kippt schnell |
+| `tempSpread` > 50 (starke Trennung) | CG sparsam (sat 10) oder aus | CG sparsam oder aus | Vorhandene Separation reicht, CG kippt schnell |
 | Warmes Licht dominant (`bMinusR` < −25) | kühl (210°) | warm beibehalten oder neutral | Kühle Schatten als Anker gegen Gesamtwärme |
 
 **Kontext-Tabelle für Variante C:**
@@ -406,8 +420,9 @@ Der Parameter erwartet einen **absoluten Kelvin-Wert** (Lightroom-Standard für 
 
 Kleine Werte (<2000 K) oder negative Werte führen zu massivem Blau-Crash (Rotkanal → 0). Wert `0` niemals setzen — führt zum Crash. Wenn nicht verwendet: Parameter weglassen.
 
-**ℹ️ `cg_*` Parameter brauchen Sättigung ≥10 um sichtbar zu greifen.**
-Werte unter 10 werden in den Zahlen zwar erkannt, aber in der gerenderten Pixel-Analyse ist kaum Unterschied messbar. Für Teal/Orange-Looks mindestens `cg_shadow_sat=15` und `cg_highlight_sat=10`. Nur `shadow`/`highlight`/`balance` verfügbar (SDK-Limit) — kein Midtone, kein Global, kein Luminanz.
+**⚠️ `auto_white_balance` ist persistent.** Nach `set_develop_settings` mit `auto_white_balance: true` bleibt der WB auf „Auto", auch wenn nachfolgende Aufrufe `auto_white_balance` nicht mehr setzen. Nur ein expliziter `temperature`-Wert überschreibt den Auto-WB-State. **In Phase 3 muss daher jede Variante `temperature` explizit setzen**, wenn Phase 2b mit `auto_white_balance: true` lief.
+
+**ℹ️ Color Grading — voller Parametersatz verfügbar.** Vier Kanäle: `cg_shadow`, `cg_midtone`, `cg_highlight`, `cg_global` (jeweils `_hue`, `_sat`, `_lum`), plus `cg_balance` und `cg_blending`. Sättigung ≥10 für sichtbare Wirkung — Werte 1–9 sind in der gerenderten Ausgabe nicht messbar. **Hue ohne Sat setzen ist toter Code** und verboten.
 
 **ℹ️ Lokale Masken nicht setzbar.**
 Vorschlag mit konkreten Werten, User setzt im Maskenpanel (`Shift+W`).
@@ -427,10 +442,14 @@ Nach schweren Mask-Renderings kann `create_snapshot` 50 s timeouten. Dann User b
 
 Ergänzung zur Pre-Set Sektions-Checkliste in Phase 3. Diese Regeln betreffen Parameter-Werte, nicht Sektions-Vollständigkeit:
 
-- **`cg_*_sat`** (Color Grading Sättigung Shadow/Highlight): entweder **0** oder **≥10** — niemals 1–9. Zwischenwerte sind in der gerenderten Ausgabe faktisch nicht messbar. Wer „dezentes Color Grading" will, lässt es aus (0) — denn technisch gibt es kein dezentes CG unter 10.
+- **`cg_*_hue` ohne `cg_*_sat` ≥10:** VERBOTEN. Hue-Wert ohne Sättigung ist toter Code und darf nicht gesetzt werden. Entweder beides setzen oder beides weglassen.
+- **`cg_*_sat`** (Color Grading Sättigung): entweder **0** oder **≥10** — niemals 1–9. Zwischenwerte sind in der gerenderten Ausgabe faktisch nicht messbar. Wer „dezentes Color Grading" will, setzt sat auf 10 (Minimum) — denn technisch gibt es kein sichtbares CG unter 10.
+- **CG-Richtung begründen:** Vor jedem `set_develop_settings` mit CG-Werten muss die Herleitung aus der CG-Richtungstabelle (Phase 3) kurz dokumentiert werden. Kein blindes Defaulting
+- **`cg_blending`:** Default 50 ist meistens passend. Nur anpassen bei extremen Split-Looks (niedriger = härter) oder sehr weichen Atmosphärisch-Edits (höher = weicher).
+- **`cg_*_lum`:** Vorsichtig einsetzen. `cg_shadow_lum` < −15 verdunkelt Schatten sichtbar, was bei Bildern mit ohnehin hohem `shadowsClippedPct` kontraproduktiv ist.
 - **`sharpen_masking`**: niemals bei Default 0 lassen für Landschaft/Stadt. Glatte Flächen (Himmel, Meer, Wände) werden sonst mitgeschärft und zeigen Rauschen-Amplifikation. Baselines siehe Anhang C.
 - **`tone_*` (parametrische Kurve)**: wenn User-Memory „Always use parametric curve" enthält, gehört mindestens **ein** `tone_*`-Wert zu jeder ernsthaften Variante, auch wenn nur leicht. Null-Kurve ist ok bei reiner Farbstil-Exploration, aber nicht als Default.
-- **`temperature`**: 0 oder Werte < 2000 K niemals setzen (Blau-Crash). Wenn unverändert: Parameter weglassen, nicht auf 0 setzen.
+- **`temperature`**: 0 oder Werte < 2000 K niemals setzen (Blau-Crash). Wenn unverändert: Parameter weglassen, nicht auf 0 setzen. **Nach Phase 2b mit `auto_white_balance`: immer explizit setzen** (siehe Phase 2b WB-Reset-Warnung).
 - **HSL-Sparsamkeit**: in monochromen Szenen (hueDistribution ≥95 % ein Bucket) nur den dominanten Bucket anfassen. Ghost-Korrekturen in leeren Buckets produzieren unvorhersehbare Ergebnisse, wenn das Bild später leicht nachbelichtet wird.
 
 ---
@@ -566,9 +585,9 @@ Innerhalb der Travel-Fotografie (Reise, Natur, Tiere, Städte, Meer, Berge, Eis)
 - Weitwinkel bis Normalbrennweite (14–70 mm)
 
 **Phase 3 — Varianten:**
-- **A — Dokumentarisch** (offene Tiefen, Matte-Lift, natürliche Farben, **CG bewusst aus**)
-- **B — Cool-Dramatic** oder **Warm-Dramatic** je nach Lichtstimmung (aggressive Schwarz-/Weißpunkte, HSL-Push der dominanten Farbe, warm-amber CG Shadows mit sat ≥10)
-- **C — Teal/Orange Cinematic** (Color Grading-Split, 210° Lichter / 35° Schatten, sat ≥15)
+- **A — Dokumentarisch** (offene Tiefen, Matte-Lift, natürliche Farben, CG optional dezent — sat 10, Richtung individuell aus Analyse ableiten)
+- **B — Cool-Dramatic** oder **Warm-Dramatic** je nach Lichtstimmung (aggressive Schwarz-/Weißpunkte, HSL-Push der dominanten Farbe, CG sat ≥15, Richtung aus Analyse)
+- **C — Kontext-Wildcard** (siehe Kontext-Tabelle in Phase 3)
 
 **Phase 3 — Schärfungs-Baselines:** Betrag 40, Radius 0.9, Details 25, **Maskieren 40**
 
@@ -687,8 +706,10 @@ Manche Travel-Bilder sind Mischformen — z.B. ein Tier in einer Landschaft, ode
 ---
 
 ## Changelog
+- **v3.9** — Vier Änderungen aus Session 4F4A3292–3316 (Antarktis, Felspinnacles + Bark Europa, 9 Bilder): (1) **🔴 Phase 2b WB-Reset-Warnung:** `auto_white_balance: true` bleibt persistent — nachfolgende Varianten erben den Auto-WB, wenn `temperature` nicht explizit gesetzt wird. Alle Varianten in Phase 3 müssen jetzt `temperature` explizit setzen. Doppelt verankert: Phase 2b + Grundeinstellungen-Checkliste + Sanity-Check + Anhang A. (2) **🔴 CG-Sat Pflicht:** Hue ohne Sat ist toter Code und verboten. Neue Sanity-Check-Regel: `cg_*_hue` darf nur zusammen mit `cg_*_sat` ≥10 gesetzt werden. (3) **🔴 CG-Richtung individuell herleiten:** CG-Hue-Werte nicht pauschal 35°/210° defaulten — Herleitung aus CG-Richtungstabelle muss vor jedem `set_develop_settings` dokumentiert werden. (4) **🟡 CG voller Parametersatz:** Anhang A aktualisiert — SDK-Limitation „nur shadow/highlight/balance" gestrichen. Jetzt verfügbar: Shadow/Midtone/Highlight/Global (jeweils Hue/Sat/Lum) + Balance + Blending. Phase 3 Sektions-Checkliste und Sanity-Check um Midtone, Luminanz und Blending ergänzt. (5) **🟡 Keyword-Bestätigung:** Phase 7a expliziter Hinweis dass Keywords nie ohne Bestätigung gesetzt werden dürfen. (6) **🟡 Anhang D Landschaft Variante A:** „CG bewusst aus" durch „CG optional dezent, Richtung individuell aus Analyse" ersetzt (Konsistenz mit v3.6-Änderung).
+- **v3.8** — CG-Update (Zwischenversion, durch v3.9 ersetzt).
 - **v3.7** — Phase 7a: `list_keywords` vor Keyword-Vorschlag verpflichtend, bestehende Keywords bevorzugen (✅/🆕-Markierung).
-- **v3.6** — Zwei Änderungen aus Session 4F4A3282 (Bark Europa, Umweltporträt mit Gletscherpanorama): (1) **Variante A CG-Regel gelockert**: „CG bewusst aus" → „CG optional dezent (sat 10, Richtung aus Analyse)". Dezentes Color Grading und Dokumentarisch schließen sich nicht aus, solange es die vorhandene Stimmung unterstützt statt eine neue aufzudrücken. (2) **Variante C von fixem Teal/Orange zu Kontext-Wildcard umgebaut**: Dritte Variante passt sich dem Bildinhalt an — Cinematic Split bei natürlicher Warm/Kalt-Trennung, Schwarzweiß bei monochromen Szenen, Atmosphärisch/Soft bei Nebel/Dunst, Warm-Dramatic bei warmem Licht. Auswahl über Analyse-Signale (`tempSpread`, `hueDistribution`, `DR`, `bMinusR`). (3) **CG-Richtungstabelle ergänzt**: Shadows/Highlig
+- **v3.6** — Zwei Änderungen aus Session 4F4A3282 (Bark Europa, Umweltporträt mit Gletscherpanorama): (1) **Variante A CG-Regel gelockert**: „CG bewusst aus" → „CG optional dezent (sat 10, Richtung aus Analyse)". Dezentes Color Grading und Dokumentarisch schließen sich nicht aus, solange es die vorhandene Stimmung unterstützt statt eine neue aufzudrücken. (2) **Variante C von fixem Teal/Orange zu Kontext-Wildcard umgebaut**: Dritte Variante passt sich dem Bildinhalt an — Cinematic Split bei natürlicher Warm/Kalt-Trennung, Schwarzweiß bei monochromen Szenen, Atmosphärisch/Soft bei Nebel/Dunst, Warm-Dramatic bei warmem Licht. Auswahl über Analyse-Signale (`tempSpread`, `hueDistribution`, `DR`, `bMinusR`). (3) **CG-Richtungstabelle ergänzt**: Shadows/Highlights-Hue aus Analyse-Signalen ableiten.
 - **v3.5** — Drei 🔴-Eigenfehler aus einer Session (Bark Europa, Antarktis-Küstenlandschaft 4F4A3249) zu einer kohärenten Änderung zusammengefasst, weil alle denselben Root-Cause haben — fehlende Sektions-Schablone in Phase 3. Ergänzungen: (1) Phase 3 **Pre-Set Sektions-Checkliste** über alle 6 LR-Panels (Grundeinstellungen / Kurve / HSL / Color Grading / Details / Effekte), auch wenn bewusst 0; (2) Anhang A **Sanity-Check-Liste** mit konkreten Parameter-Regeln (cg_*_sat 0 oder ≥10, sharpen_masking nie bei 0 für Landschaft/Stadt, tone_* als Pflicht bei Memory-Präferenz); (3) Anhang C **Schärfungs-Baselines** als Tabelle pro Kamera und Motiv-Typ inkl. Maskieren-Wert; (4) Anhang D pro Motiv-Profil jetzt Schärfungs-Baselines und Kurven-Defaults redundant aufgeführt für schnelleren Lookup in Phase 3; (5) Phase 5 **Masken-Reihenfolge und Interaktions-Warnung** (Himmel-AI-Maske blutet in Schneeberge → Schnee-Bereichsmaske verstärken oder Reality-Check einbauen); (6) Phase 6 Checkliste um `whites%`-Einbruch nach Himmel-Maske ergänzt; (7) Snapshot-Schema um `_vN`-Suffix erweitert für Korrektur-Iterationen; (8) Phase 9 Akkumulationsregel um Root-Cause-Cluster-Ausnahme erweitert (mehrere 🔴 mit gleicher Ursache = eine Änderung, sofort).
 - **v3.4** — Phase 9 (Workflow-Retrospektive) hinzugefügt: strukturierte Reflexion nach Session mit Template, Trigger-Bedingungen und Akkumulationsregel. Anhang A erweitert um Diagnose-Regel bei unerwartetem Tool-Verhalten (temperature-Lektion), Snapshot-Namenskonvention (Nummernpräfixe statt willkürliche Sternchen). Selbstreferenziell: Diese Version ist das erste Retrospektive-Ergebnis, angewandt auf die eigene Entstehungssession.
 - **v3.3** — Phase 2c (Zuschnitt & Ausrichtung) eingefügt zwischen Auto-Check und Varianten-Berechnung.

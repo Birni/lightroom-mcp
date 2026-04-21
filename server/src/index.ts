@@ -332,7 +332,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
       },
       {
         name: "set_develop_settings",
-        description: "Apply develop settings to a photo. Only the provided parameters are changed — everything else stays untouched. Set auto_tone or auto_white_balance to true to let Lightroom compute those first, then override with explicit values.\n\nBasic: temperature, tint, exposure, contrast, highlights, shadows, whites, blacks, texture, clarity, dehaze, vibrance, saturation\nTone Curve: tone_darks, tone_lights, tone_shadows, tone_highlights, tone_darks_split, tone_midtone_split, tone_highlights_split\nHSL Hue: hue_red/orange/yellow/green/aqua/blue/purple/magenta\nHSL Saturation: sat_red/orange/yellow/green/aqua/blue/purple/magenta\nHSL Luminance: lum_red/orange/yellow/green/aqua/blue/purple/magenta\nColor Grading (shadow/highlight only — SDK limitation): cg_shadow_hue, cg_shadow_sat, cg_highlight_hue, cg_highlight_sat, cg_balance\nDetail: sharpness, sharpen_radius, sharpen_detail, sharpen_masking, noise_luminance, noise_color\nEffects: vignette_amount, vignette_midpoint, vignette_feather, vignette_roundness, grain_amount, grain_size, grain_roughness",
+        description: "Apply develop settings to a photo. Only the provided parameters are changed — everything else stays untouched. Set auto_tone or auto_white_balance to true to let Lightroom compute those first, then override with explicit values.\n\nBasic: temperature, tint, exposure, contrast, highlights, shadows, whites, blacks, texture, clarity, dehaze, vibrance, saturation\nTone Curve: tone_darks, tone_lights, tone_shadows, tone_highlights, tone_darks_split, tone_midtone_split, tone_highlights_split\nHSL Hue: hue_red/orange/yellow/green/aqua/blue/purple/magenta\nHSL Saturation: sat_red/orange/yellow/green/aqua/blue/purple/magenta\nHSL Luminance: lum_red/orange/yellow/green/aqua/blue/purple/magenta\nColor Grading: cg_shadow_hue, cg_shadow_sat, cg_shadow_lum, cg_highlight_hue, cg_highlight_sat, cg_highlight_lum, cg_midtone_hue, cg_midtone_sat, cg_midtone_lum, cg_global_hue, cg_global_sat, cg_global_lum, cg_balance, cg_blending\nDetail: sharpness, sharpen_radius, sharpen_detail, sharpen_masking, noise_luminance, noise_color\nEffects: vignette_amount, vignette_midpoint, vignette_feather, vignette_roundness, grain_amount, grain_size, grain_roughness",
         inputSchema: {
           type: "object",
           properties: {
@@ -362,9 +362,11 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
             lum_yellow: { type: "number" }, lum_green: { type: "number" },
             lum_aqua: { type: "number" }, lum_blue: { type: "number" },
             lum_purple: { type: "number" }, lum_magenta: { type: "number" },
-            cg_shadow_hue: { type: "number" }, cg_shadow_sat: { type: "number" },
-            cg_highlight_hue: { type: "number" }, cg_highlight_sat: { type: "number" },
-            cg_balance: { type: "number" },
+            cg_shadow_hue: { type: "number" }, cg_shadow_sat: { type: "number" }, cg_shadow_lum: { type: "number" },
+            cg_highlight_hue: { type: "number" }, cg_highlight_sat: { type: "number" }, cg_highlight_lum: { type: "number" },
+            cg_midtone_hue: { type: "number" }, cg_midtone_sat: { type: "number" }, cg_midtone_lum: { type: "number" },
+            cg_global_hue: { type: "number" }, cg_global_sat: { type: "number" }, cg_global_lum: { type: "number" },
+            cg_balance: { type: "number" }, cg_blending: { type: "number" },
             sharpness: { type: "number" }, sharpen_radius: { type: "number" },
             sharpen_detail: { type: "number" }, sharpen_masking: { type: "number" },
             noise_luminance: { type: "number" }, noise_color: { type: "number" },

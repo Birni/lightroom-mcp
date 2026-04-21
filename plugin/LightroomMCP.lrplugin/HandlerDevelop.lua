@@ -79,7 +79,7 @@ local PARAM_MAP = {
     lum_blue                = "LuminanceAdjustmentBlue",
     lum_purple              = "LuminanceAdjustmentPurple",
     lum_magenta             = "LuminanceAdjustmentMagenta",
-    -- Color Grading (SDK exposes these via legacy SplitToning names; midtone/lum/global not accessible)
+    -- Color Grading – hue/sat/balance via applyDevelopSettings (legacy SplitToning names)
     cg_shadow_hue           = "SplitToningShadowHue",
     cg_shadow_sat           = "SplitToningShadowSaturation",
     cg_highlight_hue        = "SplitToningHighlightHue",
@@ -100,6 +100,19 @@ local PARAM_MAP = {
     grain_amount            = "GrainAmount",
     grain_size              = "GrainSize",
     grain_roughness         = "GrainFrequency",
+}
+
+-- Color Grading params only accessible via LrDevelopController.setValue (not applyDevelopSettings)
+local CG_CONTROLLER_MAP = {
+    cg_shadow_lum           = "ColorGradeShadowLum",
+    cg_highlight_lum        = "ColorGradeHighlightLum",
+    cg_midtone_hue          = "ColorGradeMidtoneHue",
+    cg_midtone_sat          = "ColorGradeMidtoneSat",
+    cg_midtone_lum          = "ColorGradeMidtoneLum",
+    cg_global_hue           = "ColorGradeGlobalHue",
+    cg_global_sat           = "ColorGradeGlobalSat",
+    cg_global_lum           = "ColorGradeGlobalLum",
+    cg_blending             = "ColorGradeBlending",
 }
 
 function DevelopHandler.setDevelopSettings(args)
@@ -132,6 +145,15 @@ function DevelopHandler.setDevelopSettings(args)
             photo:applyDevelopSettings(settings)
         end)
         logger:info("applyDevelopSettings: " .. table.concat(applied, ", "))
+    end
+
+    -- Color Grading Luminance + midtone/global params require LrDevelopController.setValue
+    for mcpKey, sdkKey in pairs(CG_CONTROLLER_MAP) do
+        if args[mcpKey] ~= nil then
+            LrDevelopController.setValue(sdkKey, args[mcpKey])
+            table.insert(applied, mcpKey .. "=" .. tostring(args[mcpKey]))
+            logger:info("LrDevelopController.setValue: " .. sdkKey .. " = " .. tostring(args[mcpKey]))
+        end
     end
 
     return {
