@@ -8,7 +8,8 @@ local logger = LrLogger('LightroomMCP')
 
 local MetadataHandler = {}
 
--- Shared photo lookup: by numeric ID, path, filename, or active photo
+-- Shared photo lookup: by numeric ID, path, exact filename, or partial filename.
+-- Returns (photo, nil) on success, (nil, errorMsg) on ambiguity, (nil, nil) when not found.
 local function lookupPhoto(catalog, args)
     if args and args.photo_id then
         local numericId = tonumber(args.photo_id)
@@ -17,18 +18,25 @@ local function lookupPhoto(catalog, args)
             catalog:withReadAccessDo(function()
                 photo = catalog:findPhotoByLocalIdentifier(numericId)
             end)
-            return photo
+            return photo, nil
         end
         local photo = catalog:findPhotoByPath(args.photo_id)
-        if not photo then
-            local found = catalog:findPhotos({
-                searchDesc = { criteria = "filename", operation = "==", value = args.photo_id }
-            })
-            if found and #found > 0 then return found[1] end
+        if photo then return photo, nil end
+        local found = catalog:findPhotos({
+            searchDesc = { criteria = "filename", operation = "==", value = args.photo_id }
+        })
+        if found and #found > 0 then return found[1], nil end
+        -- Fallback: partial filename match
+        found = catalog:findPhotos({
+            searchDesc = { criteria = "filename", operation = "any", value = args.photo_id }
+        })
+        if found and #found == 1 then return found[1], nil end
+        if found and #found > 1 then
+            return nil, "Ambiguous: " .. #found .. " photos match '" .. args.photo_id .. "'. Use a more specific name."
         end
-        return photo
+        return nil, nil
     end
-    return catalog:getTargetPhoto()
+    return catalog:getTargetPhoto(), nil
 end
 
 local function sanitize(value)
@@ -179,7 +187,8 @@ end
 -- get_photo: image only, no metadata (server returns bare image block)
 function MetadataHandler.getPhoto(args)
     local catalog = LrApplication.activeCatalog()
-    local photo = lookupPhoto(catalog, args)
+    local photo, err = lookupPhoto(catalog, args)
+    if err then return { error = err } end
     if not photo then return { error = "No photo found" } end
     local path = exportPhoto(catalog, photo)
     if not path then return { error = "Export failed" } end
@@ -189,7 +198,8 @@ end
 -- analyze_raw_photo: return RAW file path — server extracts embedded JPEG and analyses
 function MetadataHandler.analyzeRawPhoto(args)
     local catalog = LrApplication.activeCatalog()
-    local photo = lookupPhoto(catalog, args)
+    local photo, err = lookupPhoto(catalog, args)
+    if err then return { error = err } end
     if not photo then return { error = "No photo found" } end
     local rawPath = nil
     catalog:withReadAccessDo(function()
@@ -203,7 +213,8 @@ end
 -- analyze_edit: export with current LR settings — server analyses + returns image + JSON
 function MetadataHandler.analyzeEdit(args)
     local catalog = LrApplication.activeCatalog()
-    local photo = lookupPhoto(catalog, args)
+    local photo, err = lookupPhoto(catalog, args)
+    if err then return { error = err } end
     if not photo then return { error = "No photo found" } end
     local path = exportPhoto(catalog, photo)
     if not path then return { error = "Export failed" } end
