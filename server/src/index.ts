@@ -295,7 +295,7 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
       },
       {
         name: "set_develop_settings",
-        description: "Apply develop settings to a photo. Only the provided parameters are changed — everything else stays untouched. Set auto_tone or auto_white_balance to true to let Lightroom compute those first, then override with explicit values.\n\nBasic: temperature, tint, exposure, contrast, highlights, shadows, whites, blacks, texture, clarity, dehaze, vibrance, saturation\nTone Curve: tone_darks, tone_lights, tone_shadows, tone_highlights, tone_darks_split, tone_midtone_split, tone_highlights_split\nHSL Hue: hue_red/orange/yellow/green/aqua/blue/purple/magenta\nHSL Saturation: sat_red/orange/yellow/green/aqua/blue/purple/magenta\nHSL Luminance: lum_red/orange/yellow/green/aqua/blue/purple/magenta\nColor Grading: cg_shadow_hue, cg_shadow_sat, cg_shadow_lum, cg_highlight_hue, cg_highlight_sat, cg_highlight_lum, cg_midtone_hue, cg_midtone_sat, cg_midtone_lum, cg_global_hue, cg_global_sat, cg_global_lum, cg_balance, cg_blending\nDetail: sharpness, sharpen_radius, sharpen_detail, sharpen_masking, noise_luminance, noise_color\nEffects: vignette_amount, vignette_midpoint, vignette_feather, vignette_roundness, grain_amount, grain_size, grain_roughness",
+        description: "Apply develop settings to a photo. Only the provided parameters are changed — everything else stays untouched. Set auto_tone or auto_white_balance to true to let Lightroom compute those first, then override with explicit values.\n\nBasic: temperature, tint, exposure, contrast, highlights, shadows, whites, blacks, texture, clarity, dehaze, vibrance, saturation\nTone Curve: tone_darks, tone_lights, tone_shadows, tone_highlights, tone_darks_split, tone_midtone_split, tone_highlights_split\nHSL Hue: hue_red/orange/yellow/green/aqua/blue/purple/magenta\nHSL Saturation: sat_red/orange/yellow/green/aqua/blue/purple/magenta\nHSL Luminance: lum_red/orange/yellow/green/aqua/blue/purple/magenta\nColor Grading: cg_shadow_hue, cg_shadow_sat, cg_shadow_lum, cg_highlight_hue, cg_highlight_sat, cg_highlight_lum, cg_midtone_hue, cg_midtone_sat, cg_midtone_lum, cg_global_hue, cg_global_sat, cg_global_lum, cg_balance, cg_blending\nDetail: sharpness, sharpen_radius, sharpen_detail, sharpen_masking, noise_luminance, noise_color\nEffects: vignette_amount, vignette_midpoint, vignette_feather, vignette_roundness, grain_amount, grain_size, grain_roughness\n\nLimit: max. 5 develop parameters per call (photo_id, auto_tone, auto_white_balance do not count). Split larger edits into multiple calls.",
         inputSchema: {
           type: "object",
           properties: {
@@ -388,6 +388,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    // Validate set_develop_settings parameter count
+    if (name === "set_develop_settings") {
+      const CONTROL_PARAMS = new Set(["photo_id", "auto_tone", "auto_white_balance"]);
+      const developParams = Object.keys(args || {}).filter(k => !CONTROL_PARAMS.has(k));
+      if (developParams.length > 5) {
+        return {
+          content: [{ type: "text", text: `Error: set_develop_settings accepts at most 5 develop parameters per call (got ${developParams.length}: ${developParams.join(", ")}). Split into multiple calls.` }],
+          isError: true,
+        };
+      }
+    }
+
     // Generate unique request ID
     const requestId = `req_${Date.now()}_${requestIdCounter++}`;
 
