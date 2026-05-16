@@ -342,8 +342,13 @@ Methodology (all luma = BT.709: Y=0.2126R+0.7152G+0.0722B, scaled to 1280px long
       },
       {
         name: "reset_develop_settings",
-        description: "Reset all develop adjustments to defaults for the active photo in Develop module.",
-        inputSchema: { type: "object", properties: {} },
+        description: "Reset all develop adjustments to defaults for the active photo in Develop module. The crop is preserved by default.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            reset_crop: { type: "boolean", description: "Also reset crop and straighten angle. Default: false (crop is preserved)." },
+          },
+        },
       },
       {
         name: "create_snapshot",
