@@ -165,10 +165,45 @@ function DevelopHandler.setDevelopSettings(args)
 end
 
 function DevelopHandler.resetDevelopSettings(args)
-    -- Operates on the currently active photo in Develop module
+    local catalog = LrApplication.activeCatalog()
+    local resetCrop = args and args.reset_crop
+
+    -- Save crop before reset so it can be restored (default: protect crop)
+    local savedCrop = nil
+    if not resetCrop then
+        local photo = catalog:getTargetPhoto()
+        if photo then
+            catalog:withReadAccessDo(function()
+                local s = photo:getDevelopSettings()
+                if s and s.HasCrop then
+                    savedCrop = {
+                        HasCrop    = s.HasCrop,
+                        CropTop    = s.CropTop,
+                        CropLeft   = s.CropLeft,
+                        CropBottom = s.CropBottom,
+                        CropRight  = s.CropRight,
+                        CropAngle  = s.CropAngle,
+                    }
+                end
+            end)
+        end
+    end
+
     LrDevelopController.resetAllDevelopAdjustments()
     logger:info("resetAllDevelopAdjustments called")
-    return { status = "ok" }
+
+    -- Restore crop unless explicitly reset
+    if savedCrop then
+        local photo = catalog:getTargetPhoto()
+        if photo then
+            catalog:withWriteAccessDo("Restore Crop", function()
+                photo:applyDevelopSettings(savedCrop)
+            end)
+            logger:info("Crop restored after reset")
+        end
+    end
+
+    return { status = "ok", crop_reset = resetCrop and true or false }
 end
 
 function DevelopHandler.createSnapshot(args)
