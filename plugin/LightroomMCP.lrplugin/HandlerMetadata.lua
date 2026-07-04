@@ -98,8 +98,6 @@ local function buildPhotoData(catalog, photo)
     return photoData
 end
 
-local MAX_BYTES = 786432  -- 750 KB raw → ~1000 KB base64 → fits under MCP 1 MB limit
-
 -- Export the photo as a JPEG to a unique temp directory.
 -- Each call gets its own dir to avoid any file collision between retries.
 -- Returns binary data string, or nil on failure.
@@ -142,46 +140,28 @@ local function exportJpegSync(catalog, photo, quality, maxDim)
     return resultPath
 end
 
--- Try exporting with decreasing dimension (then quality) until result fits under MAX_BYTES.
--- Returns filePath, quality, maxDim, fileSize — or nil on total failure.
-local function exportWithSizeLimit(catalog, photo)
-    local steps = {
-        { maxDim = 1400, quality = 75 },
-        { maxDim = 1200, quality = 75 },
-        { maxDim = 1000, quality = 75 },
-        { maxDim = 1000, quality = 60 },
-        { maxDim = 800,  quality = 60 },
-        { maxDim = 800,  quality = 50 },
-    }
-
-    for _, step in ipairs(steps) do
-        logger:info("Exporting at " .. step.maxDim .. "px q" .. step.quality)
-        local path = exportJpegSync(catalog, photo, step.quality, step.maxDim)
-        if path then
-            local f = io.open(path, 'rb')
-            if f then
-                local size = f:seek('end')
-                f:close()
-                logger:info("Export: " .. size .. " bytes (limit " .. MAX_BYTES .. ")")
-                if size <= MAX_BYTES then
-                    return path, step.quality, step.maxDim, size
-                end
-                logger:info("Too large, trying next step")
-            end
-        else
-            logger:info("exportJpegSync returned nil at " .. step.maxDim .. "px q" .. step.quality)
-        end
-    end
-
-    return nil, nil, nil, nil
-end
+-- Single render: export the photo ONCE. The Node server fits the JPEG under the
+-- MCP size budget afterwards (fast in-memory recompression), so we no longer
+-- re-render at decreasing sizes here. The old cascade did up to 6 sequential
+-- renders; on heavily-masked/textured edits each render is expensive and the
+-- total blew past the server's 50s timeout — even though every render succeeded
+-- (which is why Lightroom still marked the photo as exported).
+local RENDER_MAXDIM  = 1600
+local RENDER_QUALITY = 80
 
 -- Shared export helper: export active/specified photo, return file path only
 local function exportPhoto(catalog, photo)
-    local exportPath, usedQuality, usedMaxDim, fileSize = exportWithSizeLimit(catalog, photo)
-    if not exportPath then return nil end
-    logger:info("Exported: " .. fileSize .. " bytes q" .. usedQuality .. " " .. usedMaxDim .. "px")
-    return exportPath
+    logger:info("Exporting at " .. RENDER_MAXDIM .. "px q" .. RENDER_QUALITY .. " (single render)")
+    local path = exportJpegSync(catalog, photo, RENDER_QUALITY, RENDER_MAXDIM)
+    if not path then
+        logger:info("exportJpegSync returned nil")
+        return nil
+    end
+    local f = io.open(path, 'rb')
+    local size = 0
+    if f then size = f:seek('end'); f:close() end
+    logger:info("Exported: " .. size .. " bytes q" .. RENDER_QUALITY .. " " .. RENDER_MAXDIM .. "px (Node fits under MCP limit)")
+    return path
 end
 
 -- get_photo: image only, no metadata (server returns bare image block)

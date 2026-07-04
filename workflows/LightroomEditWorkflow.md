@@ -505,6 +505,8 @@ Bei R6-CR3: User muss Haken bei *Profilkorrekturen aktivieren* und *Chromatische
 **⚠️ Plugin-Timeouts bei komplexen Edits.**
 Nach schweren Mask-Renderings kann `create_snapshot` 50 s timeouten. Dann User bitten, manuell Snapshot anzulegen (`+`-Icon im Schnappschüsse-Panel).
 
+**✅ `analyze_edit`/`get_photo`-Timeout nach Masken — behoben ab Plugin v0.2.0.** Ursache war die Re-Export-Kaskade (`exportWithSizeLimit`): das Plugin renderte bis zu 6× in absteigender Größe, bis das JPEG unter das Größenlimit passte — texturreiche/maskierte Edits (1,4–2,6 MB) fuhren die volle Kaskade → >50 s. LR schloss jeden Export ab (Foto galt als „exportiert"), aber der Server hatte schon aufgegeben. Fix: Plugin rendert nur noch 1× (1600 px q80), der Node-Server drückt das JPEG in-memory (`sharp`) unter das MCP-Limit. Wenn `analyze_edit` bei älterer Plugin-Version timeoutet: Version im Zusatzmodul-Manager prüfen (muss ≥ 0.2.0 sein); als Workaround Reihenfolge tauschen — erst Keywords/Rating (kein Export), Verifikation danach.
+
 ---
 
 ### 🔴 Sanity-Check-Liste (vor jedem `set_develop_settings`)

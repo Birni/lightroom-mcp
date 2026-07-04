@@ -9,7 +9,11 @@ import {
 import express from "express";
 import cors from "cors";
 import fs from "fs";
-import { extractEmbeddedJpeg, analyzeImage } from "./analyzePhoto.js";
+import { extractEmbeddedJpeg, analyzeImage, fitJpegUnderBytes } from "./analyzePhoto.js";
+
+// Max raw JPEG bytes we base64-embed in an MCP response. base64 inflates ~4/3,
+// so 740 KB → ~987 KB, safely under the ~1 MB message limit.
+const MCP_IMAGE_BUDGET_BYTES = 740_000;
 
 const HTTP_PORT = 8765;
 
@@ -443,9 +447,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // ── get_photo: bare image, no analysis ───────────────────────────
         if (name === "get_photo" && res?.imagePath) {
           const buf = fs.readFileSync(toWslPath(res.imagePath));
+          const fitted = await fitJpegUnderBytes(buf, MCP_IMAGE_BUDGET_BYTES);
           return {
             content: [
-              { type: "image", data: buf.toString("base64"), mimeType: "image/jpeg" },
+              { type: "image", data: fitted.toString("base64"), mimeType: "image/jpeg" },
             ],
           };
         }
@@ -465,10 +470,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // ── analyze_edit: exported JPEG → image + full analysis ──────────
         if (name === "analyze_edit" && res?.imagePath) {
           const buf = fs.readFileSync(toWslPath(res.imagePath));
+          // Analyse the full-res render (better statistics); return a fitted copy.
           const analysis = await analyzeImage(buf, "exported_jpeg");
+          const fitted = await fitJpegUnderBytes(buf, MCP_IMAGE_BUDGET_BYTES);
           return {
             content: [
-              { type: "image", data: buf.toString("base64"), mimeType: "image/jpeg" },
+              { type: "image", data: fitted.toString("base64"), mimeType: "image/jpeg" },
               { type: "text", text: JSON.stringify(analysis, null, 2) },
             ],
           };
