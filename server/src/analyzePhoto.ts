@@ -26,6 +26,36 @@ export function extractEmbeddedJpeg(filePath: string): Buffer | null {
   return best ? data.slice(best.start, best.end) : null;
 }
 
+// ── MCP image fitting ─────────────────────────────────────────────────────────
+
+/**
+ * Shrink a JPEG (in-memory, via sharp) until it fits under `maxBytes`, so it can
+ * be base64-embedded in an MCP response (~1 MB message limit).
+ *
+ * This replaces the plugin's old multi-step re-export cascade: the plugin now
+ * renders the photo ONCE (one mask render) and hands us the result; any size
+ * fitting happens here as fast in-memory recompression — not repeated Lightroom
+ * renders that took >50s on heavily-masked/textured edits.
+ */
+export async function fitJpegUnderBytes(buf: Buffer, maxBytes: number): Promise<Buffer> {
+  if (buf.length <= maxBytes) return buf;
+
+  const meta = await sharp(buf).metadata();
+  const origW = meta.width ?? 1600;
+
+  // Progressively smaller long-edge widths, then lower quality, until it fits.
+  for (const targetW of [1400, 1200, 1000, 800, 640]) {
+    if (targetW >= origW) continue;
+    for (const quality of [72, 60, 50]) {
+      const out = await sharp(buf).resize({ width: targetW }).jpeg({ quality }).toBuffer();
+      if (out.length <= maxBytes) return out;
+    }
+  }
+
+  // Last resort — smallest/lowest we allow.
+  return await sharp(buf).resize({ width: 640 }).jpeg({ quality: 45 }).toBuffer();
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface TonalCluster {

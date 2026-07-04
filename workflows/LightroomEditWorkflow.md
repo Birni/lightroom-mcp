@@ -189,13 +189,82 @@ Standard-Varianten für **Landschaft** (Default, wenn Motiv-Typ nicht eindeutig)
 | Bildkontext | Variante C wird zu | Charakter |
 |---|---|---|
 | Szene hat natürliche Warm/Kalt-Trennung (tempSpread 25–50) | **Cinematic Split** | CG-Richtung aus Tabelle oben, sat ≥10, Farbtrennung verstärken |
-| Monochrome/farbarme Szene (hueDistr. ≥90% ein Bucket, unsaturatedPct >60%) | **Schwarzweiß** | Kontrast-getrieben, Rotfilter-Simulation für Himmel-Drama |
+| Monochrome/farbarme Szene mit Struktur-Potenzial (hueDistr. ≥90% ein Bucket, saturation.median <20, Struktur sichtbar) | **Gritty** | Struktur/Klarheit aggressiv, Dehaze stark, Kontrast/Blacks tief, Entsättigung global, Temperatur kühler. Für Verfall, Industrie, Erosion, verwitterte Materialien — Textur trägt die Geschichte |
+| Farb-vielfältige Szene mit Handlung (hueDistr. mehrere Buckets aktiv >5%, saturation.median >30, Bewegung/Aktion erkennbar) | **Warm-Reportage** | Vibrance hoch, Temperatur warm, Vibrance über Sättigung (kein globaler Push), HSL gezielt auf 2–3 Akzentfarben aus Bildanalyse. Für Menschen, Tiere, Ausrüstung — Farbe und Präsenz erzählen. Kontrast/Klarheit neutral, Dehaze moderat |
 | Nebel, Dunst, weiches Licht (DR <4, saturation median <15) | **Atmosphärisch/Soft** | Lifted Blacks (+tone_shadows +15–20), reduzierter Kontrast, Pastelltöne, kein Dehaze |
 | Warmes Licht dominant (bMinusR < −25, Orange/Yellow >50%) | **Warm-Dramatic** | Wie B, aber warme Farbtemperatur beibehalten statt kühl ziehen |
 
 *Schwellenwerte vorläufig — wird über Sessions kalibriert.*
 
-Für Wildlife/Stadt siehe Motiv-Profile.
+---
+
+### 🔨 Gritty — Parameterleitfaden
+
+Für monochromatische oder farbarme Szenen, in denen **Textur und Struktur die Geschichte tragen**. Verfall, Industrie, Erosion, verwitterte Materialien.
+
+**Kern-Hebel** (immer erhöhen):
+- `clarity`: +30 bis +50 (aggressiv — deutlich über Docu-Niveau)
+- `texture`: +25 bis +40 (Oberflächencharakter hervorheben)
+- `dehaze`: +20 bis +35 (aggressiv, damit entfernte Strukturen lesbar werden)
+
+**Tonale Kontrolle**:
+- `contrast`: +20 bis +30 (stärker als Docu)
+- `blacks`: −20 bis −30 (tiefe Schwarzpunkte für Gewicht)
+- `shadows`: −5 bis −10 (optional, nur wenn Felsen noch zu hell)
+- `tone_shadows`: +5 bis +8 (Matte im Tiefen-Bereich, gegen Clipping)
+
+**Farbe zurücknehmen**:
+- `saturation`: −15 bis −25 (global entsättigt — rau und ehrlich)
+- `temperature`: 5200–5500 K (kühler als Docu, sachlicher Ton — kein Color Grading nötig)
+- HSL: nicht anfassen (bei farbarmen Szenen ohnehin wenig zu holen)
+
+**Details & Effekte**:
+- `sharpness`: je Kamera-Baseline (siehe Anhang C)
+- `sharpen_masking`: mittel (25–35), weil Strukturen von Schärfe profitieren
+- `vignette_amount`: −3 bis −8 (dezent, nur Rahmen-Verdichtung)
+- Dehaze wichtiger als Vignette
+
+**Color Grading**: aus. Textur trägt allein.
+
+---
+
+### 🎬 Warm-Reportage — Parameterleitfaden
+
+Für farb-vielfältige Szenen mit **Handlung und Präsenz**. Menschen in Bewegung, Tiere, Ausrüstung, bunte Umgebungselemente.
+
+**Kern-Hebel** (immer erhöhen):
+- `vibrance`: +25 bis +40 (deutlich über Docu-Niveau — Farbe lebendig, ohne hart zu wirken)
+- `temperature`: 5800–6200 K (wärmer als Docu — Handlung fühlt sich lebendiger an)
+
+**Tonale Kontrolle** (bleibt Docu-Level):
+- `contrast`: 0 bis +5 (neutral — Farbe macht die Arbeit, nicht Schärfe/Kontrast)
+- `clarity`: 0 bis +10 (neutral bis leicht — nicht dominant)
+- `structure`: 0 bis +5 (neutral — Details kommen über Vibrance, nicht Struktur)
+- `tone_*` (parametrische Kurve): Default 0 — keine Dramaturgie nötig
+
+**Farbe gezielt pushen** (bildabhängig):
+- `saturation`: 0 (global neutral — Vibrance macht den Job)
+- **HSL nur auf 2–3 aktiven Akzentfarben** (aus `hueDistribution`):
+  - `saturation`: +5 bis +15 pro Bucket (nicht pauschal, bildabhängig bestimmen)
+  - `luminance`: ±0–5 (optional, nur wenn Akzentfarbe zu dunkel/hell wirkt)
+  - **Leere Buckets niemals anfassen** — Ghost-Korrektionen vermeiden
+- **Color Grading**: aus (natürliche Farbverteilung reicht bei mehreren Farben)
+  - Exception: nur wenn `tempSpread` niedrig (<20) — dann dezent CG sat 10 für Separation
+
+**Details & Effekte**:
+- `sharpness`: je Kamera-Baseline (Motiv-abhängig: Wildlife wenn Tiere, Landschaft wenn Übersicht)
+- `sharpen_masking`: je Motiv (siehe Anhang C)
+- `dehaze`: +5 bis +10 (moderat — Hintergrund-Details, nicht dominant)
+- `vignette_amount`: −2 bis −5 (dezent, sonst wirkt Motiv unnatürlich isoliert)
+
+**Was NICHT tun**:
+- Keine globale Entsättigung — Farbvielfalt ist das Asset
+- Nicht mit Klarheit übertreiben — Struktur würde Farb-Dynamik ersticken
+- Color Grading mit sat ≥15 nur bei sehr niedriger natürlicher Farbtrennung
+
+---
+
+*Beide Stile werden nur als Variante C angeboten — erkannt an Bildanalyse-Signalen oder explizit angefordert in Phase 0.*
 
 Falls ein spezieller Stilwunsch in Phase 0 kam (z.B. „high-key", „schwarzweiß"), ersetzt Claude eine der Standardvarianten entsprechend.
 
@@ -435,6 +504,8 @@ Bei R6-CR3: User muss Haken bei *Profilkorrekturen aktivieren* und *Chromatische
 
 **⚠️ Plugin-Timeouts bei komplexen Edits.**
 Nach schweren Mask-Renderings kann `create_snapshot` 50 s timeouten. Dann User bitten, manuell Snapshot anzulegen (`+`-Icon im Schnappschüsse-Panel).
+
+**✅ `analyze_edit`/`get_photo`-Timeout nach Masken — behoben ab Plugin v0.2.0.** Ursache war die Re-Export-Kaskade (`exportWithSizeLimit`): das Plugin renderte bis zu 6× in absteigender Größe, bis das JPEG unter das Größenlimit passte — texturreiche/maskierte Edits (1,4–2,6 MB) fuhren die volle Kaskade → >50 s. LR schloss jeden Export ab (Foto galt als „exportiert"), aber der Server hatte schon aufgegeben. Fix: Plugin rendert nur noch 1× (1600 px q80), der Node-Server drückt das JPEG in-memory (`sharp`) unter das MCP-Limit. Wenn `analyze_edit` bei älterer Plugin-Version timeoutet: Version im Zusatzmodul-Manager prüfen (muss ≥ 0.2.0 sein); als Workaround Reihenfolge tauschen — erst Keywords/Rating (kein Export), Verifikation danach.
 
 ---
 
@@ -706,6 +777,7 @@ Manche Travel-Bilder sind Mischformen — z.B. ein Tier in einer Landschaft, ode
 ---
 
 ## Changelog
+- **v4.0** — Zwei neue Variante-C Stile hinzugefügt (User-Request): (1) **Gritty** für monochromatische/farbarme Szenen mit Struktur-Potenzial (Verfall, Industrie, Erosion) — aggressiv auf Struktur/Klarheit/Dehaze, Blacks tief, global entsättigt. (2) **Warm-Reportage** für farb-vielfältige Szenen mit Handlung (Menschen, Tiere, Ausrüstung) — Vibrance als Hauptregler, Farbe via HSL gezielt auf 2–3 Akzentfarben, Kontrast/Klarheit neutral, Dehaze moderat. Beide Stile ersetzen nicht A/B, sondern erweitern nur Variante C um zwei neue Kontext-Optionen mit konkreten Parameterleitfäden in Phase 3.
 - **v3.9** — Vier Änderungen aus Session 4F4A3292–3316 (Antarktis, Felspinnacles + Bark Europa, 9 Bilder): (1) **🔴 Phase 2b WB-Reset-Warnung:** `auto_white_balance: true` bleibt persistent — nachfolgende Varianten erben den Auto-WB, wenn `temperature` nicht explizit gesetzt wird. Alle Varianten in Phase 3 müssen jetzt `temperature` explizit setzen. Doppelt verankert: Phase 2b + Grundeinstellungen-Checkliste + Sanity-Check + Anhang A. (2) **🔴 CG-Sat Pflicht:** Hue ohne Sat ist toter Code und verboten. Neue Sanity-Check-Regel: `cg_*_hue` darf nur zusammen mit `cg_*_sat` ≥10 gesetzt werden. (3) **🔴 CG-Richtung individuell herleiten:** CG-Hue-Werte nicht pauschal 35°/210° defaulten — Herleitung aus CG-Richtungstabelle muss vor jedem `set_develop_settings` dokumentiert werden. (4) **🟡 CG voller Parametersatz:** Anhang A aktualisiert — SDK-Limitation „nur shadow/highlight/balance" gestrichen. Jetzt verfügbar: Shadow/Midtone/Highlight/Global (jeweils Hue/Sat/Lum) + Balance + Blending. Phase 3 Sektions-Checkliste und Sanity-Check um Midtone, Luminanz und Blending ergänzt. (5) **🟡 Keyword-Bestätigung:** Phase 7a expliziter Hinweis dass Keywords nie ohne Bestätigung gesetzt werden dürfen. (6) **🟡 Anhang D Landschaft Variante A:** „CG bewusst aus" durch „CG optional dezent, Richtung individuell aus Analyse" ersetzt (Konsistenz mit v3.6-Änderung).
 - **v3.8** — CG-Update (Zwischenversion, durch v3.9 ersetzt).
 - **v3.7** — Phase 7a: `list_keywords` vor Keyword-Vorschlag verpflichtend, bestehende Keywords bevorzugen (✅/🆕-Markierung).
